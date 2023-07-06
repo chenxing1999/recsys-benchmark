@@ -1,0 +1,62 @@
+[build-system]
+requires = [
+         "setuptools>=42",
+         "setuptools_scm[toml]",
+         "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recsys-benchmark"
+description = "Code for benchmark recommendation system"
+authors = [{name = "Hung Tran", email = "tranvinhhung99@gmail.com"}]
+license = {file = "LICENSE"}
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "torch",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "pytest",
+    "coverage",
+    "pre-commit",
+    "pytest-xdist",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+namespaces = false
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+
+[tool.black]
+line-length = 88
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+src_paths = ["scripts", "src", "test"]
