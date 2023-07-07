@@ -24,7 +24,7 @@ dev = [
     "pytest",
     "coverage",
     "pre-commit",
-    "pytest-xdist",
+    "jupyterlab",
 ]
 
 [project.readme]
