@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "opencv-python-headless",
     "torch",
+    "einops",
 ]
 dynamic = ["version"]
 

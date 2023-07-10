@@ -1,0 +1,15 @@
+model:
+  num_layers: 2
+  hidden_size: 64
+
+train_dataset:
+  path: dataset/cf/amazon-book/train.txt
+  num_workers: 4
+  batch_size: 1024
+
+test_dataset:
+  path: dataset/cf/amazon-book/test.txt
+
+checkpoint_path: checkpoints/checkpoint.pth
+num_epochs: 10
+log_step: 100

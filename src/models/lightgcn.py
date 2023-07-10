@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import torch
 from torch import nn
@@ -43,7 +43,19 @@ class LightGCN(nn.Module):
         for _ in range(self.num_layers):
             step = matrix @ step
             res = res + step
-        return res
+        return res / self.num_layers
+
+    def reg_loss(self, users, pos_items, neg_items):
+        user_emb = self.user_emb_table(users)
+        pos_item_emb = self.item_emb_table(pos_items)
+        neg_item_emb = self.item_emb_table(neg_items)
+
+        reg_loss = (
+            user_emb.norm(2).pow(2)
+            + pos_item_emb.norm(2).pow(2)
+            + neg_item_emb.norm(2).pow(2)
+        ) / (2 * len(users))
+        return reg_loss
 
 
 @dataclass
@@ -56,7 +68,7 @@ class LightGCNConfig:
 
 
 class LightGCNInterface(ICollabRecSys):
-    def __init__(self, config: LightGCNConfig, graph: dict[int, list[int]]):
+    def __init__(self, config: LightGCNConfig, graph: Dict[int, List[int]]):
         """
         Args:
             config: LightGCN model config
@@ -68,11 +80,14 @@ class LightGCNInterface(ICollabRecSys):
             config.num_layers,
             config.hidden_size,
         )
+        self._graph = graph
         self._config = config
+        self.refresh_table()
 
+    def refresh_table(self):
         with torch.no_grad():
             preprocessed_adj = calculate_sparse_graph_adj_norm(
-                graph,
+                self._graph,
                 self._config.num_item,
                 self._config.num_user,
             )
@@ -88,8 +103,6 @@ class LightGCNInterface(ICollabRecSys):
         self._emb_table_user.weight.data = emb_table[: self._config.num_user]
         self._emb_table_item.weight.data = emb_table[self._config.num_user :]
 
-        self._graph = graph
-
     @torch.no_grad()
     def get_top_k(self, user_id: int, k=5) -> List[int]:
         self.core.eval()
@@ -104,7 +117,7 @@ class LightGCNInterface(ICollabRecSys):
 
         # Filter not interacted item
         item_indices = [
-            i for i in range(self._config.num_item) if i in self._graph[user_id]
+            i for i in range(self._config.num_item) if i not in self._graph[user_id]
         ]
         item_indices = torch.tensor(item_indices)
 
@@ -112,6 +125,8 @@ class LightGCNInterface(ICollabRecSys):
         item_emb_not_interacted = item_embs[item_indices]
         scores = user_emb @ item_emb_not_interacted.T
         scores = scores.squeeze()
+
+        k = min(len(scores), k)
         results = torch.topk(scores, k=k)
         final_result = item_indices[results[1]]
         return final_result.cpu().tolist()

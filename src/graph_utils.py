@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Dict, List, Optional
 
 import torch
 
 
 def calculate_sparse_graph_adj_norm(
-    graph: dict[int, list[int]],
+    graph: Dict[int, List[int]],
     num_item: int,
     num_user: Optional[int] = None,
 ) -> torch.Tensor:
@@ -23,12 +23,12 @@ def calculate_sparse_graph_adj_norm(
     num_interact = 0
     for user, items in graph.items():
         # R
-        indices[0].extend([user + num_item] * len(items))
-        indices[1].extend([item for item in items])
+        indices[0].extend([user] * len(items))
+        indices[1].extend([(item + num_user) for item in items])
 
         # R.T
-        indices[1].extend([user + num_item] * len(items))
-        indices[0].extend([item for item in items])
+        indices[1].extend([user] * len(items))
+        indices[0].extend([(item + num_user) for item in items])
 
         num_interact += len(items)
 
