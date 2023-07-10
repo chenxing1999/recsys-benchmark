@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from ..graph_utils import calculate_sparse_graph_adj_norm
 
 
-def load_graph_dataset(path: str) -> Tuple[dict, list, int]:
+def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
     """
 
     Returns:
@@ -19,6 +19,8 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int]:
     graph = {}
     users = []
     num_item = 0
+    num_interactions = 0
+    user_interact_pair = []
     with open(path) as fin:
         for line in fin.readlines():
             info = line.strip().split()
@@ -34,10 +36,12 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int]:
             graph[user_id] = interacted_items
             users.append(user_id)
             num_item = max(*graph[user_id], num_item)
+            num_interactions += len(interacted_items)
+            user_interact_pair += [user_id] * len(interacted_items)
 
     # num_item is currently max item id
     # item_id count from 0 --> To get num_item, need to plus 1
-    return graph, users, num_item + 1
+    return graph, users, num_item + 1, user_interact_pair
 
 
 class CFGraphDataset(Dataset):
@@ -50,9 +54,10 @@ class CFGraphDataset(Dataset):
         """
 
         self._path = path
-        graph, users, num_item = load_graph_dataset(path)
+        graph, users, num_item, user_interact_pair = load_graph_dataset(path)
 
         self._users = users
+        self._users_interact_pair = user_interact_pair
         self._graph = graph
         self._num_item = num_item
         self._norm_adj = calculate_sparse_graph_adj_norm(
@@ -60,10 +65,11 @@ class CFGraphDataset(Dataset):
         )
 
     def __len__(self):
-        return len(self._users)
+        # return len(self._users)
+        return len(self._users_interact_pair)
 
     def __getitem__(self, idx) -> Tuple[int, int, int]:
-        user_idx = self._users[idx]
+        user_idx = self._users_interact_pair[idx]
         if not self._graph[user_idx]:
             raise ValueError("Exists user with no item interaction")
 
@@ -107,7 +113,7 @@ class TestCFGraphDataset(Dataset):
         """
         self._path = path
         self._path = path
-        graph, users, num_item = load_graph_dataset(path)
+        graph, users, num_item, num_interactions = load_graph_dataset(path)
 
         self._users = users
         self._graph = graph

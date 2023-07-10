@@ -40,7 +40,7 @@ def train_epoch(dataloader, model: LightGCN, optimizer, device="cuda", log_step=
         neg_embs = torch.index_select(embs, 0, neg_items + num_users)
 
         loss = bpr_loss(user_embs, pos_embs, neg_embs)
-        reg_loss = model.reg_loss(users, pos_items, neg_items)
+        reg_loss = model.get_reg_loss(users, pos_items, neg_items)
         loss = loss + 1e-4 * reg_loss
 
         optimizer.zero_grad()
@@ -50,7 +50,14 @@ def train_epoch(dataloader, model: LightGCN, optimizer, device="cuda", log_step=
         num_sample += users.shape[0]
 
         if log_step and idx % log_step == 0:
-            print("Idx: ", idx, "- Loss:", cum_loss / num_sample)
+            print(
+                "Idx: ",
+                idx,
+                "- Loss:",
+                cum_loss / num_sample,
+                "- RegLoss",
+                reg_loss.item(),
+            )
 
     return cum_loss / num_sample
 
@@ -69,7 +76,7 @@ def validate_epoch_filter(
     # TODO: Make this to function later lol
     adj = train_dataset._norm_adj
     num_users = train_dataset.num_users
-    num_items = train_dataset.num_items
+    train_dataset.num_items
     graph = train_dataset.get_graph()
 
     model.train()
@@ -91,20 +98,13 @@ def validate_epoch_filter(
     for idx in tqdm.tqdm(range(len(val_dataset))):
         user, pos_item = val_dataset[idx]
         # Filter not interacted item
-        if user not in NOT_INTERACTED:
-            set_interacted = set(graph[user])
-            item_indices = [i for i in range(num_items) if i not in set_interacted]
-            NOT_INTERACTED[user] = item_indices
-        else:
-            item_indices = NOT_INTERACTED[user]
+        interacted = torch.tensor(graph[user], device=user)
 
-        item_indices = torch.tensor(item_indices, device=device)
-
-        scores = user_embs[user].unsqueeze(0) @ item_embs[item_indices].T
+        scores = user_embs[user].unsqueeze(0) @ item_embs.T
         scores = scores.squeeze()
+        scores[interacted] = torch.float("-inf")
 
-        y_pred = torch.topk(scores, k)
-        y_pred = item_indices[y_pred[1]]
+        y_pred = torch.topk(scores, k)[1]
 
         all_y_pred.append(y_pred.cpu().tolist())
         all_y_true.append(pos_item)
@@ -179,6 +179,7 @@ def main(argv: Optional[Sequence[str]] = None):
     train_dataset_config = config["train_dataset"]
     train_dataset = CFGraphDataset(train_dataset_config["path"])
     print("Successfully load train dataset")
+    train_dataset.describe()
     train_dataloader = DataLoader(
         train_dataset,
         train_dataset_config["batch_size"],
@@ -204,7 +205,7 @@ def main(argv: Optional[Sequence[str]] = None):
         model_config["num_layers"],
         model_config["hidden_size"],
     )
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.Adam(
         model.parameters(),
         lr=1e-3,
         # weight_decay=1e-4,
@@ -218,8 +219,12 @@ def main(argv: Optional[Sequence[str]] = None):
     num_epochs = config["num_epochs"]
     for epoch_idx in range(num_epochs):
         print("Epoch - ", epoch_idx)
-        train_epoch(train_dataloader, model, optimizer, device, config["log_step"])
+        loss = train_epoch(
+            train_dataloader, model, optimizer, device, config["log_step"]
+        )
+        print("Loss - ", loss)
         val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
+        # val_metrics = validate_epoch_filter(train_dataset, val_dataset, model, device)
 
         if best_ndcg < val_metrics["ndcg"]:
             print("New best, saving model...")

@@ -43,9 +43,9 @@ def calculate_sparse_graph_adj_norm(
 
     degree = adj.sum(dim=0).pow(-0.5)
 
-    indicies = adj.coalesce().indices()
-    values = torch.index_select(degree, 0, indicies[0]) * torch.index_select(
-        degree, 0, indicies[1]
+    indices = adj.coalesce().indices()
+    values = torch.index_select(degree, 0, indices[0]) * torch.index_select(
+        degree, 0, indices[1]
     )
 
     norm_adj = torch.sparse_coo_tensor(

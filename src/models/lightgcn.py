@@ -16,6 +16,11 @@ class LightGCN(nn.Module):
         self.user_emb_table = nn.Embedding(num_user, hidden_size)
         self.item_emb_table = nn.Embedding(num_item, hidden_size)
         self.num_layers = num_layers
+        self._init_normal_weight()
+
+    def _init_normal_weight(self):
+        nn.init.normal_(self.user_emb_table.weight, std=0.1)
+        nn.init.normal_(self.item_emb_table.weight, std=0.1)
 
     def get_emb_table(self, matrix):
         """
@@ -45,7 +50,7 @@ class LightGCN(nn.Module):
             res = res + step
         return res / self.num_layers
 
-    def reg_loss(self, users, pos_items, neg_items):
+    def get_reg_loss(self, users, pos_items, neg_items) -> torch.Tensor:
         user_emb = self.user_emb_table(users)
         pos_item_emb = self.item_emb_table(pos_items)
         neg_item_emb = self.item_emb_table(neg_items)
