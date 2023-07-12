@@ -63,7 +63,9 @@ class CFGraphDataset(Dataset):
         self._norm_adj = calculate_sparse_graph_adj_norm(
             self._graph, self._num_item, len(self._users)
         )
-        self.dataset_length = len(user_interact_pair) // len(self._users)
+        self.dataset_length = self.num_users * (
+            len(user_interact_pair) // self.num_users
+        )
 
     def __len__(self):
         # return len(self._users)
