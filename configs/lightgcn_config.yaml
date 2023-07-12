@@ -9,9 +9,10 @@ train_dataset:
 
 test_dataset:
   path: dataset/cf/gowalla/test.txt
+  batch_size: 2048
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 10
+num_epochs: 1000
 log_step: 100
 
 weight_decay: 0.0001

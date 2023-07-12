@@ -213,7 +213,11 @@ def main(argv: Optional[Sequence[str]] = None):
     val_dataset_config = config["test_dataset"]
     val_dataset = TestCFGraphDataset(val_dataset_config["path"])
     val_dataloader = DataLoader(
-        val_dataset, 1024, shuffle=False, collate_fn=TestCFGraphDataset.collate_fn
+        val_dataset,
+        val_dataset_config["batch_size"],
+        shuffle=False,
+        collate_fn=TestCFGraphDataset.collate_fn,
+        num_workers=4,
     )
     print("Successfully load test dataset")
 
