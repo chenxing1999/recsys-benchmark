@@ -136,12 +136,9 @@ class TestCFGraphDataset(Dataset):
 
     @staticmethod
     def collate_fn(batch, pad_idx=-1):
-        max_size = max(len(items) for user, items in batch)
-
         new_users = []
         new_user_items = []
         for user, items in batch:
-            max_size - len(items)
             new_users.append(user)
             new_user_items.append(items)
 

@@ -13,10 +13,17 @@ from src.losses import bpr_loss
 from src.models.lightgcn import LightGCN
 
 NOT_INTERACTED = {}
-FILTER = 0
+FILTER = 1
 
 
-def train_epoch(dataloader, model: LightGCN, optimizer, device="cuda", log_step=10):
+def train_epoch(
+    dataloader: DataLoader,
+    model: LightGCN,
+    optimizer,
+    device="cuda",
+    log_step=10,
+    weight_decay=0,
+):
     # TODO: Make this to function later lol
     adj = dataloader.dataset._norm_adj
     num_users = dataloader.dataset.num_users
@@ -40,8 +47,12 @@ def train_epoch(dataloader, model: LightGCN, optimizer, device="cuda", log_step=
         neg_embs = torch.index_select(embs, 0, neg_items + num_users)
 
         loss = bpr_loss(user_embs, pos_embs, neg_embs)
-        reg_loss = model.get_reg_loss(users, pos_items, neg_items)
-        loss = loss + 1e-4 * reg_loss
+
+        reg_loss = 0
+        if weight_decay > 0:
+            reg_loss = model.get_reg_loss(users, pos_items, neg_items)
+
+        loss = loss + weight_decay * reg_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -102,7 +113,7 @@ def validate_epoch_filter(
 
         scores = user_embs[user].unsqueeze(0) @ item_embs.T
         scores = scores.squeeze()
-        scores[interacted] = torch.float("-inf")
+        scores[interacted] = float("-inf")
 
         y_pred = torch.topk(scores, k)[1]
 
@@ -130,6 +141,7 @@ def validate_epoch(
     # TODO: Make this to function later lol
     adj = train_dataset._norm_adj
     num_users = train_dataset.num_users
+    graph = train_dataset.get_graph()
 
     model.eval()
     model = model.to(device)
@@ -148,6 +160,16 @@ def validate_epoch(
     for users, pos_items in val_loader:
         # scores: batch_user x num_items
         scores = user_embs[users] @ item_embs.T
+
+        if FILTER:
+            ind0 = []
+            ind1 = []
+            for idx, user in enumerate(users):
+                user = user.item()
+                ind0.extend([idx] * len(graph[user]))
+                ind1.extend([item for item in graph[user]])
+
+            scores[ind0, ind1] = float("-inf")
 
         y_pred = torch.topk(scores, k)
         y_pred = y_pred[1]
@@ -207,8 +229,7 @@ def main(argv: Optional[Sequence[str]] = None):
     )
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=1e-3,
-        # weight_decay=1e-4,
+        lr=config["learning_rate"],
     )
     if torch.cuda.is_available():
         device = "cuda"
@@ -217,10 +238,16 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_ndcg = 0
     num_epochs = config["num_epochs"]
+    val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
     for epoch_idx in range(num_epochs):
         print("Epoch - ", epoch_idx)
         loss = train_epoch(
-            train_dataloader, model, optimizer, device, config["log_step"]
+            train_dataloader,
+            model,
+            optimizer,
+            device,
+            config["log_step"],
+            config["weight_decay"],
         )
         print("Loss - ", loss)
         val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)

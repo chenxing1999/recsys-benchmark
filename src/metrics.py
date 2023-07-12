@@ -13,14 +13,16 @@ def get_ndcg(y_pred: List[List[int]], y_true: List[List[int]], k=20) -> float:
                 y_true_ij - Item index recommended for user i with rank j
     """
 
-    dcg = 0
-    idcg = 0
+    ndcg = 0
     for pred_user, true_user in zip(y_pred, y_true):
+        dcg = 0
+        idcg = 0
         for idx, pred_item in enumerate(pred_user[:k]):
             dcg += int(pred_item in true_user) / math.log2(idx + 2)
 
-        for idx in range(min(len(y_true), k)):
+        for idx in range(min(len(true_user), k)):
             idcg += 1 / math.log2(idx + 2)
 
-        # ndcg += dcg / idcg
-    return dcg / idcg
+        ndcg += dcg / idcg
+    num_users = len(y_pred)
+    return ndcg / num_users

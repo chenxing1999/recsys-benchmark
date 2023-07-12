@@ -1,15 +1,18 @@
 model:
-  num_layers: 2
+  num_layers: 3
   hidden_size: 64
 
 train_dataset:
-  path: dataset/cf/amazon-book/train.txt
+  path: dataset/cf/gowalla/train.txt
   num_workers: 4
-  batch_size: 1024
+  batch_size: 2048
 
 test_dataset:
-  path: dataset/cf/amazon-book/test.txt
+  path: dataset/cf/gowalla/test.txt
 
 checkpoint_path: checkpoints/checkpoint.pth
 num_epochs: 10
 log_step: 100
+
+weight_decay: 0.0001
+learning_rate: 0.001
