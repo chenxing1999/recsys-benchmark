@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "opencv-python-headless",
     "torch",
+    "einops",
 ]
 dynamic = ["version"]
 
@@ -24,7 +25,7 @@ dev = [
     "pytest",
     "coverage",
     "pre-commit",
-    "pytest-xdist",
+    "jupyterlab",
 ]
 
 [project.readme]
