@@ -254,18 +254,18 @@ def main(argv: Optional[Sequence[str]] = None):
             config["weight_decay"],
         )
         print("Loss - ", loss)
-        val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
-        # val_metrics = validate_epoch_filter(train_dataset, val_dataset, model, device)
+        if epoch_idx % 10 == 0:
+            val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
 
-        if best_ndcg < val_metrics["ndcg"]:
-            print("New best, saving model...")
-            best_ndcg = val_metrics["ndcg"]
+            if best_ndcg < val_metrics["ndcg"]:
+                print("New best, saving model...")
+                best_ndcg = val_metrics["ndcg"]
 
-            checkpoint = {
-                "state_dict": model.state_dict(),
-                "model_config": model_config,
-            }
-            torch.save(checkpoint, config["checkpoint_path"])
+                checkpoint = {
+                    "state_dict": model.state_dict(),
+                    "model_config": model_config,
+                }
+                torch.save(checkpoint, config["checkpoint_path"])
 
 
 if __name__ == "__main__":

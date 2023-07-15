@@ -48,7 +48,7 @@ class LightGCN(nn.Module):
         for _ in range(self.num_layers):
             step = matrix @ step
             res = res + step
-        return res / self.num_layers
+        return res / (self.num_layers + 1)
 
     def get_reg_loss(self, users, pos_items, neg_items) -> torch.Tensor:
         user_emb = self.user_emb_table(users)
