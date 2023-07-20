@@ -38,9 +38,6 @@ class HCCFModelCore(IGraphBaseCore):
             user_emb
             item_emb
         """
-        import pdb
-
-        pdb.set_trace()
 
         user_emb_step = self.user_emb_table.weight
         item_emb_step = self.item_emb_table.weight
