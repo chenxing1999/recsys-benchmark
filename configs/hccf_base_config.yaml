@@ -7,7 +7,7 @@ model:
 train_dataloader:
   dataset:
     path: dataset/cf/gowalla/train.txt
-    adj_style: lightgcn # lightgcn or hccf
+    adj_style: hccf # lightgcn or hccf
   num_workers: 4
   batch_size: 2048
 

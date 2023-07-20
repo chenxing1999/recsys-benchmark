@@ -22,6 +22,11 @@ class HCCFModelCore(IGraphBaseCore):
 
         self.num_layers = num_layers
         self.sparse_dropout = nn.Identity()
+        self._init_weight()
+
+    def _init_weight(self):
+        nn.init.xavier_uniform_(self.user_emb_table.weight)
+        nn.init.xavier_uniform_(self.item_emb_table.weight)
 
     def get_emb_table(self, matrix):
         """
@@ -33,6 +38,9 @@ class HCCFModelCore(IGraphBaseCore):
             user_emb
             item_emb
         """
+        import pdb
+
+        pdb.set_trace()
 
         user_emb_step = self.user_emb_table.weight
         item_emb_step = self.item_emb_table.weight
