@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 
 from src import metrics
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
+from src.loggers import Logger
 from src.losses import bpr_loss
 from src.models.lightgcn import LightGCN
 
@@ -80,7 +81,6 @@ def validate_epoch(
     val_loader: DataLoader,
     model: LightGCN,
     device="cuda",
-    verbose=1,
     k=20,
     filter_item_on_train=True,
     profiler=None,
@@ -140,8 +140,6 @@ def validate_epoch(
             profiler.step()
 
     ndcg = metrics.get_ndcg(all_y_pred, all_y_true)
-    if verbose:
-        print("NDCG:", ndcg)
     return {
         "ndcg": ndcg,
     }
@@ -186,11 +184,12 @@ def init_profiler(config: Dict):
 
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
+    logger = Logger(**config["logger"])
 
-    print("Load train dataset...")
+    logger.info("Load train dataset...")
     train_dataset_config = config["train_dataset"]
     train_dataset = CFGraphDataset(train_dataset_config["path"])
-    print("Successfully load train dataset")
+    logger.info("Successfully load train dataset")
     train_dataset.describe()
     train_dataloader = DataLoader(
         train_dataset,
@@ -199,7 +198,7 @@ def main(argv: Optional[Sequence[str]] = None):
         num_workers=train_dataset_config["num_workers"],
     )
 
-    print("Load val dataset...")
+    logger.info("Load val dataset...")
     val_dataset_config = config["test_dataset"]
     val_dataset = TestCFGraphDataset(val_dataset_config["path"])
     val_dataloader = DataLoader(
@@ -209,7 +208,7 @@ def main(argv: Optional[Sequence[str]] = None):
         collate_fn=TestCFGraphDataset.collate_fn,
         num_workers=4,
     )
-    print("Successfully load test dataset")
+    logger.info("Successfully load test dataset")
 
     checkpoint_folder = os.path.dirname(config["checkpoint_path"])
     os.makedirs(checkpoint_folder, exist_ok=True)
@@ -230,6 +229,8 @@ def main(argv: Optional[Sequence[str]] = None):
     else:
         device = "cpu"
 
+    logger.info(f"Model config: {model_config}")
+
     train_prof, val_prof = None, None
     if config["enable_profile"]:
         train_prof = init_profiler(config["profilers"]["train_profiler"])
@@ -241,7 +242,7 @@ def main(argv: Optional[Sequence[str]] = None):
     num_epochs = config["num_epochs"]
     val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
     for epoch_idx in range(num_epochs):
-        print("Epoch - ", epoch_idx)
+        logger.log_metric("Epoch", epoch_idx, epoch_idx)
         loss = train_epoch(
             train_dataloader,
             model,
@@ -251,8 +252,7 @@ def main(argv: Optional[Sequence[str]] = None):
             config["weight_decay"],
             train_prof,
         )
-        # prof.step()
-        print("Loss - ", loss)
+        logger.log_metric("train/loss", loss, epoch_idx)
         if epoch_idx % config["validate_step"] == 0:
             val_metrics = validate_epoch(
                 train_dataset,
@@ -262,9 +262,11 @@ def main(argv: Optional[Sequence[str]] = None):
                 filter_item_on_train=True,
                 profiler=val_prof,
             )
+            for key, value in val_metrics.items():
+                logger.log_metric(f"val/{key}", value, epoch_idx)
 
             if best_ndcg < val_metrics["ndcg"]:
-                print("New best, saving model...")
+                logger.info("New best, saving model...")
                 best_ndcg = val_metrics["ndcg"]
 
                 checkpoint = {
