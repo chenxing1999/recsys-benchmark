@@ -18,7 +18,7 @@ class LightGCN(IGraphBaseCore):
         self.num_layers = num_layers
         self._init_normal_weight()
         self._num_user = num_user
-        self._num_item = num_user
+        self._num_item = num_item
 
     def _init_normal_weight(self):
         nn.init.normal_(self.user_emb_table.weight, std=0.1)

@@ -24,6 +24,9 @@ class IGraphBaseCore(nn.Module):
     def get_reg_loss(self, users, pos_items, neg_items) -> torch.Tensor:
         ...
 
+    def forward(self, matrix):
+        return self.get_emb_table(matrix)
+
 
 class ICollabRecSys(ABC):
     """Interface for Collaborated-based Recommendation System"""

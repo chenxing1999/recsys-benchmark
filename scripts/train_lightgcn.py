@@ -59,14 +59,12 @@ def train_epoch(
 
         # Logging
         if log_step and idx % log_step == 0:
-            loguru.logger.info(
-                "Idx: ",
-                idx,
-                "- Loss:",
-                cum_loss / num_sample,
-                "- RegLoss",
-                reg_loss.item(),
+            msg = (
+                f"Idx: {idx}"
+                f" - Loss: {cum_loss / num_sample}"
+                f" - Reg Loss: {reg_loss.item()}"
             )
+            loguru.logger.info(msg)
 
         if profiler:
             profiler.step()
@@ -214,8 +212,11 @@ def main(argv: Optional[Sequence[str]] = None):
 
     model_config = config["model"]
     model = get_graph_model(
-        train_dataset.num_users, train_dataset.num_items, model_config
+        train_dataset.num_users,
+        train_dataset.num_items,
+        model_config,
     )
+
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config["learning_rate"],
