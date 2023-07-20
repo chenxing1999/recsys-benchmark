@@ -29,7 +29,7 @@ enable_profile: false
 
 profilers:
   train_profiler:
-    log_path: logs/lightgcn/train
+    log_path: logs/hccf/train
     # Check pytorch document on profiler for more information
     # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
     schedule:
@@ -41,7 +41,7 @@ profilers:
     profile_memory: true
     with_stack: false
   val_profiler:
-    log_path: logs/lightgcn/val
+    log_path: logs/hccf/val
     schedule:
       wait: 1
       warmup: 1
@@ -53,4 +53,4 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/lightgcn
+  log_folder: logs/hccf
