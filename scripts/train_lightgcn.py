@@ -92,7 +92,6 @@ def validate_epoch(
         val_dataloader
         model
         device
-        verbose
         k
         filter_item_on_train: Remove item that user already interacted on train
     Returns:
@@ -126,7 +125,7 @@ def validate_epoch(
             ind1 = []
             for idx, user in enumerate(users.tolist()):
                 ind0.extend([idx] * len(graph[user]))
-                ind1.extend([item for item in graph[user]])
+                ind1.extend(graph[user])
 
             scores[ind0, ind1] = float("-inf")
 
