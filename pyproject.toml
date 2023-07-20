@@ -1,8 +1,8 @@
 [build-system]
 requires = [
-         "setuptools>=42",
-         "setuptools_scm[toml]",
-         "wheel",
+    "setuptools>=42",
+    "setuptools_scm[toml]",
+    "wheel",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -16,6 +16,9 @@ dependencies = [
     "opencv-python-headless",
     "torch",
     "einops",
+    "loguru",
+    "torch_tb_profiler",
+    "tensorboard",
 ]
 dynamic = ["version"]
 

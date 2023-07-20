@@ -121,6 +121,7 @@ class TestCFGraphDataset(Dataset):
         self._users = users
         self._graph = graph
         self._num_item = num_item
+        self._compute_set()
 
     def __len__(self):
         return len(self._users)
@@ -130,12 +131,13 @@ class TestCFGraphDataset(Dataset):
         Return:
             user_id
             all_item_pos
+            set_all_item_pos
         """
         user_idx = self._users[idx]
         if not self._graph[user_idx]:
             raise ValueError("Exists user with no item interaction")
 
-        return user_idx, self._graph[user_idx]
+        return user_idx, self._idx_to_set[user_idx]
 
     @staticmethod
     def collate_fn(batch, pad_idx=-1):
@@ -146,3 +148,8 @@ class TestCFGraphDataset(Dataset):
             new_user_items.append(items)
 
         return torch.tensor(new_users), new_user_items
+
+    def _compute_set(self):
+        self._idx_to_set = {}
+        for idx, v in self._graph.items():
+            self._idx_to_set[idx] = set(v)
