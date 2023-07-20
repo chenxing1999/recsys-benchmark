@@ -2,6 +2,7 @@ import argparse
 import os
 from typing import Dict, List, Optional, Sequence, Set, Union
 
+import loguru
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -10,21 +11,19 @@ from src import metrics
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.losses import bpr_loss
-from src.models.lightgcn import LightGCN
+from src.models import IGraphBaseCore, get_graph_model
 
 
 def train_epoch(
     dataloader: DataLoader,
-    model: LightGCN,
+    model: IGraphBaseCore,
     optimizer,
     device="cuda",
     log_step=10,
     weight_decay=0,
     profiler=None,
 ):
-    # TODO: Make this to function later lol
-    adj = dataloader.dataset._norm_adj
-    num_users = dataloader.dataset.num_users
+    adj = dataloader.dataset.get_norm_adj()
 
     model.train()
     model.to(device)
@@ -34,15 +33,15 @@ def train_epoch(
     num_sample = 0
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
-        embs = model.get_emb_table(adj)
+        all_user_emb, all_item_emb = model.get_emb_table(adj)
 
         users = users.to(device)
         pos_items = pos_items.to(device)
         neg_items = neg_items.to(device)
 
-        user_embs = torch.index_select(embs, 0, users)
-        pos_embs = torch.index_select(embs, 0, pos_items + num_users)
-        neg_embs = torch.index_select(embs, 0, neg_items + num_users)
+        user_embs = torch.index_select(all_user_emb, 0, users)
+        pos_embs = torch.index_select(all_item_emb, 0, pos_items)
+        neg_embs = torch.index_select(all_item_emb, 0, neg_items)
 
         loss = bpr_loss(user_embs, pos_embs, neg_embs)
 
@@ -60,7 +59,7 @@ def train_epoch(
 
         # Logging
         if log_step and idx % log_step == 0:
-            print(
+            loguru.logger.info(
                 "Idx: ",
                 idx,
                 "- Loss:",
@@ -79,7 +78,7 @@ def train_epoch(
 def validate_epoch(
     train_dataset: CFGraphDataset,
     val_loader: DataLoader,
-    model: LightGCN,
+    model: IGraphBaseCore,
     device="cuda",
     k=20,
     filter_item_on_train=True,
@@ -97,9 +96,7 @@ def validate_epoch(
     Returns:
         "ndcg"
     """
-    # TODO: Make this to function later lol
-    adj = train_dataset._norm_adj
-    num_users = train_dataset.num_users
+    adj = train_dataset.get_norm_adj()
     graph = train_dataset.get_graph()
 
     model.eval()
@@ -107,9 +104,7 @@ def validate_epoch(
     adj = adj.to(device)
 
     # num_user + num_item, hidden_dim
-    embs = model.get_emb_table(adj)
-    user_embs = embs[:num_users]
-    item_embs = embs[num_users:]
+    user_embs, item_embs = model.get_emb_table(adj)
 
     ndcg = 0
     all_y_pred = []
@@ -185,27 +180,32 @@ def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
 
+    # Loading train dataset
     logger.info("Load train dataset...")
-    train_dataset_config = config["train_dataset"]
-    train_dataset = CFGraphDataset(train_dataset_config["path"])
+    train_dataloader_config = config["train_dataloader"]
+    train_dataset_config = train_dataloader_config["dataset"]
+    train_dataset = CFGraphDataset(
+        train_dataset_config["path"],
+        train_dataset_config["adj_style"],
+    )
     logger.info("Successfully load train dataset")
     train_dataset.describe()
     train_dataloader = DataLoader(
         train_dataset,
-        train_dataset_config["batch_size"],
+        train_dataloader_config["batch_size"],
         shuffle=True,
-        num_workers=train_dataset_config["num_workers"],
+        num_workers=train_dataloader_config["num_workers"],
     )
 
     logger.info("Load val dataset...")
-    val_dataset_config = config["test_dataset"]
-    val_dataset = TestCFGraphDataset(val_dataset_config["path"])
+    val_dataloader_config = config["test_dataloader"]
+    val_dataset = TestCFGraphDataset(val_dataloader_config["dataset"]["path"])
     val_dataloader = DataLoader(
         val_dataset,
-        val_dataset_config["batch_size"],
+        val_dataloader_config["batch_size"],
         shuffle=False,
         collate_fn=TestCFGraphDataset.collate_fn,
-        num_workers=4,
+        num_workers=val_dataloader_config["num_workers"],
     )
     logger.info("Successfully load test dataset")
 
@@ -213,11 +213,8 @@ def main(argv: Optional[Sequence[str]] = None):
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = LightGCN(
-        train_dataset.num_users,
-        train_dataset.num_items,
-        model_config["num_layers"],
-        model_config["hidden_size"],
+    model = get_graph_model(
+        train_dataset.num_users, train_dataset.num_items, model_config
     )
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -233,7 +230,7 @@ def main(argv: Optional[Sequence[str]] = None):
     train_prof, val_prof = None, None
     if config["enable_profile"]:
         train_prof = init_profiler(config["profilers"]["train_profiler"])
-        val_prof = init_profiler(config["profilers"]["train_profiler"])
+        val_prof = init_profiler(config["profilers"]["val_profiler"])
 
         config["num_epochs"] = 1
 

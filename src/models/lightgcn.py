@@ -5,10 +5,10 @@ import torch
 from torch import nn
 
 from ..graph_utils import calculate_sparse_graph_adj_norm
-from .base import ICollabRecSys
+from .base import ICollabRecSys, IGraphBaseCore
 
 
-class LightGCN(nn.Module):
+class LightGCN(IGraphBaseCore):
     """LightGCN model based on https://arxiv.org/pdf/2002.02126.pdf"""
 
     def __init__(self, num_user, num_item, num_layers=2, hidden_size=64):
@@ -17,6 +17,8 @@ class LightGCN(nn.Module):
         self.item_emb_table = nn.Embedding(num_item, hidden_size)
         self.num_layers = num_layers
         self._init_normal_weight()
+        self._num_user = num_user
+        self._num_item = num_user
 
     def _init_normal_weight(self):
         nn.init.normal_(self.user_emb_table.weight, std=0.1)
@@ -29,8 +31,8 @@ class LightGCN(nn.Module):
                 denoted as A_tilde in the paper
 
         Returns
-            res: Denote as E in the paper
-                (num_user + num_item, hidden_size)
+            user_emb: (num_user, hidden_size)
+            item_emb: (num_item, hidden_size)
         """
 
         # embs = E^0 in paper
@@ -48,7 +50,8 @@ class LightGCN(nn.Module):
         for _ in range(self.num_layers):
             step = matrix @ step
             res = res + step
-        return res / (self.num_layers + 1)
+        res = res / (self.num_layers + 1)
+        return torch.split(res, (self._num_user, self._num_item))
 
     def get_reg_loss(self, users, pos_items, neg_items) -> torch.Tensor:
         user_emb = self.user_emb_table(users)

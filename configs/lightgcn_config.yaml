@@ -1,15 +1,20 @@
 model:
+  name: lightgcn # lightgcn or hccf
   num_layers: 3
   hidden_size: 64
 
-train_dataset:
-  path: dataset/cf/gowalla/train.txt
+train_dataloader:
+  dataset:
+    path: dataset/cf/gowalla/train.txt
+    adj_style: lightgcn # lightgcn or hccf
   num_workers: 4
   batch_size: 2048
 
-test_dataset:
-  path: dataset/cf/gowalla/test.txt
+test_dataloader:
+  dataset:
+    path: dataset/cf/gowalla/test.txt
   batch_size: 2048
+  num_workers: 4
 
 checkpoint_path: checkpoints/checkpoint.pth
 num_epochs: 3
