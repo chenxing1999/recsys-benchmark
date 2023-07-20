@@ -12,8 +12,35 @@ test_dataset:
   batch_size: 2048
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 1000
+num_epochs: 1
 log_step: 100
 
 weight_decay: 0.0001
 learning_rate: 0.001
+validate_step: 10
+
+enable_profile: false
+
+profilers:
+  train_profiler:
+    log_path: logs/lightgcn/train
+    # Check pytorch document on profiler for more information
+    # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+  val_profiler:
+    log_path: logs/lightgcn/val
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: true
