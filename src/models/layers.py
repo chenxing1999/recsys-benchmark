@@ -13,6 +13,7 @@ class SparseDropout(nn.Module):
         self._dropout = nn.Dropout(p, inplace)
 
     def forward(self, matrix: torch.Tensor):
+        matrix = matrix.coalesce()
         values = matrix.values()
         indices = matrix.indices()
 
