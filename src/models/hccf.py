@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from .base import IGraphBaseCore
+from .layers import SparseDropout
 
 
 class HCCFModelCore(IGraphBaseCore):
@@ -14,6 +15,7 @@ class HCCFModelCore(IGraphBaseCore):
         num_layers=2,
         hidden_size=64,
         slope=0.5,
+        p_dropout=0.5,
     ):
         super().__init__()
         self.user_emb_table = nn.Embedding(num_user, hidden_size)
@@ -21,7 +23,10 @@ class HCCFModelCore(IGraphBaseCore):
         self.activation = nn.LeakyReLU(slope)
 
         self.num_layers = num_layers
-        self.sparse_dropout = nn.Identity()
+        if p_dropout > 0:
+            self.sparse_dropout = SparseDropout(p_dropout)
+        else:
+            self.sparse_dropout = nn.Identity()
         self._init_weight()
 
     def _init_weight(self):

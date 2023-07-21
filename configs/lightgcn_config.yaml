@@ -2,6 +2,7 @@ model:
   name: lightgcn # lightgcn or hccf
   num_layers: 3
   hidden_size: 64
+  p_dropout: 0.2
 
 train_dataloader:
   dataset:
@@ -17,7 +18,7 @@ test_dataloader:
   num_workers: 4
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 3
+num_epochs: 1000
 log_step: 100
 
 weight_decay: 0.0001

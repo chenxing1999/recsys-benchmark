@@ -6,12 +6,13 @@ from torch import nn
 
 from ..graph_utils import calculate_sparse_graph_adj_norm
 from .base import ICollabRecSys, IGraphBaseCore
+from .layers import SparseDropout
 
 
 class LightGCN(IGraphBaseCore):
     """LightGCN model based on https://arxiv.org/pdf/2002.02126.pdf"""
 
-    def __init__(self, num_user, num_item, num_layers=2, hidden_size=64):
+    def __init__(self, num_user, num_item, num_layers=2, hidden_size=64, p_dropout=0):
         super().__init__()
         self.user_emb_table = nn.Embedding(num_user, hidden_size)
         self.item_emb_table = nn.Embedding(num_item, hidden_size)
@@ -19,6 +20,8 @@ class LightGCN(IGraphBaseCore):
         self._init_normal_weight()
         self._num_user = num_user
         self._num_item = num_item
+
+        self.sparse_dropout = SparseDropout(p_dropout)
 
     def _init_normal_weight(self):
         nn.init.normal_(self.user_emb_table.weight, std=0.1)
@@ -44,6 +47,7 @@ class LightGCN(IGraphBaseCore):
             ],
             dim=0,
         )
+        matrix = self.sparse_dropout(matrix)
 
         res = embs
         step = embs
