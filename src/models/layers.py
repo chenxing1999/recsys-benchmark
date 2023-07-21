@@ -9,6 +9,7 @@ class SparseDropout(nn.Module):
             p: probability of an element to be zeroed. Default: 0.5
             inplace
         """
+        super().__init__()
         self._dropout = nn.Dropout(p, inplace)
 
     def forward(self, matrix: torch.Tensor):
