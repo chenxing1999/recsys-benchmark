@@ -3,12 +3,53 @@ from typing import Dict, List, Optional
 import torch
 
 
+def get_adj(
+    graph: Dict[int, List[int]],
+    num_item: int,
+    num_user: Optional[int] = None,
+    normalize=False,
+) -> torch.tensor:
+    """Get Adjacency matrix from graph item"""
+    if not num_user:
+        num_user = max(graph.keys())
+
+    indices = [[], []]
+    num_interact = 0
+
+    for user, items in graph.items():
+        indices[0].extend([user] * len(items))
+        indices[1].extend(items)
+        num_interact += len(items)
+
+    indices = torch.tensor(indices)
+    adj = torch.sparse_coo_tensor(
+        indices,
+        torch.ones(num_interact),
+        size=(num_user, num_item),
+    )
+    if not normalize:
+        return adj
+
+    degree_user = adj.sum(dim=1).pow(-0.5)
+    degree_item = adj.sum(dim=0).pow(-0.5)
+    values = torch.index_select(degree_user, 0, indices[0]) * torch.index_select(
+        degree_item, 0, indices[1]
+    )
+    adj = torch.sparse_coo_tensor(
+        indices,
+        values.coalesce().values(),
+        size=(num_user, num_item),
+    )
+
+    return adj
+
+
 def calculate_sparse_graph_adj_norm(
     graph: Dict[int, List[int]],
     num_item: int,
     num_user: Optional[int] = None,
 ) -> torch.Tensor:
-    """Calculate  A_hat
+    """Calculate A_hat from LightGCN paper based on input parameter
 
     Args:
         graph: Mapping from user to its list of items
@@ -31,9 +72,6 @@ def calculate_sparse_graph_adj_norm(
         indices[0].extend([(item + num_user) for item in items])
 
         num_interact += len(items)
-
-        # norm_degree = 1 / math.sqrt(len(items))
-        # degrees.append(norm_degree)
 
     adj = torch.sparse_coo_tensor(
         indices,

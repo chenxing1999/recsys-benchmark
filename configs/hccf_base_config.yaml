@@ -1,13 +1,13 @@
 model:
-  name: lightgcn # lightgcn or hccf
-  num_layers: 3
+  name: hccf # lightgcn or hccf
+  num_layers: 2
   hidden_size: 64
-  p_dropout: 0.2
+  slope: 1. # Disable leaky relu
 
 train_dataloader:
   dataset:
     path: dataset/cf/gowalla/train.txt
-    adj_style: lightgcn # lightgcn or hccf
+    adj_style: hccf # lightgcn or hccf
   num_workers: 4
   batch_size: 2048
 
@@ -18,7 +18,7 @@ test_dataloader:
   num_workers: 4
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 1000
+num_epochs: 3
 log_step: 100
 
 weight_decay: 0.0001
@@ -29,7 +29,7 @@ enable_profile: false
 
 profilers:
   train_profiler:
-    log_path: logs/lightgcn/train
+    log_path: logs/hccf/train
     # Check pytorch document on profiler for more information
     # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
     schedule:
@@ -41,7 +41,7 @@ profilers:
     profile_memory: true
     with_stack: false
   val_profiler:
-    log_path: logs/lightgcn/val
+    log_path: logs/hccf/val
     schedule:
       wait: 1
       warmup: 1
@@ -53,4 +53,4 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/lightgcn
+  log_folder: logs/hccf

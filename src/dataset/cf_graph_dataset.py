@@ -2,9 +2,10 @@ import random
 from typing import Dict, List, Tuple
 
 import torch
+from loguru import logger
 from torch.utils.data import Dataset
 
-from ..graph_utils import calculate_sparse_graph_adj_norm
+from ..graph_utils import calculate_sparse_graph_adj_norm, get_adj
 
 
 def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
@@ -27,7 +28,7 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
             user_id = int(info[0])
             interacted_items = [int(item) for item in info[1:]]
             if len(interacted_items) == 0:
-                print(
+                logger.warning(
                     f"Not found item for user {user_id=} in {line=}.",
                     "Remove from dataset",
                 )
@@ -45,14 +46,20 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
 
 
 class CFGraphDataset(Dataset):
-    def __init__(self, path: str):
+    """LightGCN Graph CF Structure"""
+
+    def __init__(self, path: str, adj_style: str):
         """
         Args:
             path: Path to dataset txt file
                 the file contains multiple line with each line contains
                     <user_id> <item_id1> <item_id2> ...
+            adj_style: lightgcn or hccf
         """
-
+        assert adj_style in [
+            "lightgcn",
+            "hccf",
+        ], f"{adj_style=}, only accepts ['lightgcn', 'hccf']"
         self._path = path
         graph, users, num_item, user_interact_pair = load_graph_dataset(path)
 
@@ -60,9 +67,21 @@ class CFGraphDataset(Dataset):
         self._users_interact_pair = user_interact_pair
         self._graph = graph
         self._num_item = num_item
-        self._norm_adj = calculate_sparse_graph_adj_norm(
-            self._graph, self._num_item, len(self._users)
-        )
+
+        if adj_style == "lightgcn":
+            self._norm_adj = calculate_sparse_graph_adj_norm(
+                self._graph, self.num_items, self.num_users
+            )
+        elif adj_style == "hccf":
+            self._norm_adj = get_adj(
+                graph,
+                self.num_items,
+                self.num_users,
+                normalize=True,
+            )
+
+        else:
+            raise ValueError(f"{adj_style=} is not supported")
         self.per_user_num = len(user_interact_pair) // self.num_users
         self.dataset_length = self.num_users * self.per_user_num
 
@@ -85,14 +104,14 @@ class CFGraphDataset(Dataset):
 
     def describe(self):
         # Minor analyze for dataset
-        print("Num user:", len(self._users), "- Num item:", self._num_item)
+        logger.info("Num user:", len(self._users), "- Num item:", self._num_item)
 
         stats = []
         for items in self._graph.values():
             stats.append(len(items))
 
-        print("Min degree", min(stats))
-        print("Max degree", max(stats))
+        logger.info("Min degree", min(stats))
+        logger.info("Max degree", max(stats))
 
     @property
     def num_users(self):
@@ -104,6 +123,9 @@ class CFGraphDataset(Dataset):
 
     def get_graph(self) -> Dict[int, List[int]]:
         return self._graph
+
+    def get_norm_adj(self):
+        return self._norm_adj
 
 
 class TestCFGraphDataset(Dataset):
