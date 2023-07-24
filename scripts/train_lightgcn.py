@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
-from src.losses import bpr_loss
+from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore, get_graph_model
 
 
@@ -22,6 +22,7 @@ def train_epoch(
     log_step=10,
     weight_decay=0,
     profiler=None,
+    info_nce_weight=0,
 ):
     adj = dataloader.dataset.get_norm_adj()
 
@@ -49,7 +50,24 @@ def train_epoch(
         if weight_decay > 0:
             reg_loss = model.get_reg_loss(users, pos_items, neg_items)
 
-        loss = loss + weight_decay * reg_loss
+        # Enable SGL-Without Augmentation for faster converge
+        info_nce_loss = 0
+        if info_nce_weight > 0:
+            temperature = 0.2
+
+            tmp_user_idx = torch.unique(users)
+            tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
+
+            tmp_pos_idx = torch.unique(pos_items)
+            tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
+
+            info_nce_loss = info_nce(
+                tmp_user_embs, tmp_user_embs, temperature
+            ) + info_nce(tmp_pos_embs, tmp_pos_embs, temperature)
+
+            info_nce_loss = info_nce_loss * info_nce_weight
+
+        loss = loss + weight_decay * reg_loss + info_nce_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -248,8 +266,14 @@ def main(argv: Optional[Sequence[str]] = None):
             config["log_step"],
             config["weight_decay"],
             train_prof,
+            info_nce_weight=config["info_nce_weight"],
+        )
+
+        logger.log_metric(
+            "train/peak_cuda_mem", torch.cuda.max_memory_allocated(), epoch_idx
         )
         logger.log_metric("train/loss", loss, epoch_idx)
+
         if epoch_idx % config["validate_step"] == 0:
             val_metrics = validate_epoch(
                 train_dataset,
@@ -258,6 +282,10 @@ def main(argv: Optional[Sequence[str]] = None):
                 device,
                 filter_item_on_train=True,
                 profiler=val_prof,
+            )
+
+            logger.log_metric(
+                "val/peak_cuda_mem", torch.cuda.max_memory_allocated(), epoch_idx
             )
             for key, value in val_metrics.items():
                 logger.log_metric(f"val/{key}", value, epoch_idx)
