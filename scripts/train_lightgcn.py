@@ -239,6 +239,12 @@ def main(argv: Optional[Sequence[str]] = None):
         model.parameters(),
         lr=config["learning_rate"],
     )
+
+    num_params = 0
+    for p in model.parameters():
+        num_params += p.numel()
+    logger.log_metric("num_params", num_params)
+
     if torch.cuda.is_available():
         device = "cuda"
     else:
@@ -284,9 +290,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 profiler=val_prof,
             )
 
-            logger.log_metric(
-                "val/peak_cuda_mem", torch.cuda.max_memory_allocated(), epoch_idx
-            )
+            val_metrics["peak_cuda_mem"] = torch.cuda.max_memory_allocated()
             for key, value in val_metrics.items():
                 logger.log_metric(f"val/{key}", value, epoch_idx)
 
@@ -297,6 +301,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 checkpoint = {
                     "state_dict": model.state_dict(),
                     "model_config": model_config,
+                    "val_metrics": val_metrics,
                 }
                 torch.save(checkpoint, config["checkpoint_path"])
 

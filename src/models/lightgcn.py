@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import torch
 
 from .base import IGraphBaseCore
-from .embeddings import IEmbedding, QRHashingEmbedding, VanillaEmbedding
+from .embeddings import IEmbedding, get_embedding
 from .layers import SparseDropout
 
 
@@ -37,24 +37,16 @@ class LightGCN(IGraphBaseCore):
         self.sparse_dropout = SparseDropout(p_dropout)
 
     def _init_embedding(self, num_user, num_item, hidden_size):
-        name = self.embedding_config["name"]
-        self.embedding_config.pop("name")
-        if name == "vanilla":
-            self.user_emb_table = VanillaEmbedding(num_user, hidden_size)
-            self.item_emb_table = VanillaEmbedding(num_item, hidden_size)
-        elif name == "hashing":
-            self.user_emb_table = QRHashingEmbedding(
-                num_user,
-                hidden_size,
-                **self.embedding_config,
-            )
-            self.item_emb_table = QRHashingEmbedding(
-                num_user,
-                hidden_size,
-                **self.embedding_config,
-            )
-        else:
-            raise NotImplementedError()
+        self.user_emb_table = get_embedding(
+            self.embedding_config,
+            num_user,
+            hidden_size,
+        )
+        self.item_emb_table = get_embedding(
+            self.embedding_config,
+            num_item,
+            hidden_size,
+        )
 
     def get_emb_table(self, matrix):
         """
