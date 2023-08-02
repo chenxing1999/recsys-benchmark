@@ -14,22 +14,14 @@ def get_graph_model(
 
     # pop name for ** trick
     name = model_config.pop("name")
-    assert name in ["hccf", "lightgcn"]
 
-    if name == "lightgcn":
-        model = LightGCN(
-            num_users,
-            num_items,
-            **model_config,
-        )
-    elif name == "hccf":
-        model = HCCFModelCore(
-            num_users,
-            num_items,
-            **model_config,
-        )
-    else:
-        raise NotImplementedError()
+    name_to_cls = {
+        "lightgcn": LightGCN,
+        "hccf": HCCFModelCore,
+    }
+    assert name in name_to_cls
+    cls = name_to_cls[name]
+    model = cls(num_users, num_items, **model_config)
 
     model_config["name"] = name
 
