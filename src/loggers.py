@@ -35,7 +35,11 @@ class Logger(ILogger):
         self._summary_writer = SummaryWriter(log_dir)
 
     def log_metric(self, metric_name, value, step=None):
-        msg = f"{metric_name}: {value}"
+        if isinstance(value, float):
+            msg = f"{metric_name}: {value:.2f}"
+        else:
+            msg = f"{metric_name}: {value}"
+
         if step:
             msg = f"{step=} - {msg}"
         self._logger.log(self._level, msg)

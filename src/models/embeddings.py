@@ -9,8 +9,9 @@ from torch import nn
 
 class IEmbedding(nn.Module):
     """
-    Note: I usually try to make sure that all weight are init from same distribution.
-    Currently implement init from normal distribution N(0, 0.1)
+    Note: Not all weight is initialized from the same distribution
+    as I found out that the Xavier uniform despite converge slower
+    but usually get higher accuracy.
     """
 
     def get_weight(self):
@@ -20,9 +21,13 @@ class IEmbedding(nn.Module):
 class VanillaEmbedding(nn.Embedding, IEmbedding):
     """Wrapper for default PyTorch Embedding"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, initializer="xavier", **kwargs):
         super().__init__(*args, **kwargs)
-        nn.init.normal_(self.weight, std=0.1)
+
+        if initializer == "xavier":
+            nn.init.xavier_uniform_(self.weight)
+        else:
+            nn.init.normal_(self.weight, std=0.1)
 
     def get_weight(self):
         return self.weight
@@ -261,7 +266,11 @@ def get_embedding(
         "dhe": DHEEmbedding,
     }
     if name == "vanilla":
-        emb = VanillaEmbedding(num_item, hidden_size)
+        emb = VanillaEmbedding(
+            num_item,
+            hidden_size,
+            **embedding_config,
+        )
     elif name not in name_to_cls:
         raise NotImplementedError()
     else:

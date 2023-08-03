@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from ..graph_utils import calculate_sparse_graph_adj_norm, get_adj
 
 
-def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
+def load_graph_dataset(path: str) -> Tuple[dict, list, int, list]:
     """
 
     Returns:
@@ -21,7 +21,7 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
     users = []
     num_item = 0
     num_interactions = 0
-    user_interact_pair = []
+    user_item_pairs = []
     with open(path) as fin:
         for line in fin.readlines():
             info = line.strip().split()
@@ -38,17 +38,17 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, int]:
             users.append(user_id)
             num_item = max(*graph[user_id], num_item)
             num_interactions += len(interacted_items)
-            user_interact_pair += [user_id] * len(interacted_items)
+            user_item_pairs.extend((user_id, item) for item in interacted_items)
 
     # num_item is currently max item id
     # item_id count from 0 --> To get num_item, need to plus 1
-    return graph, users, num_item + 1, user_interact_pair
+    return graph, users, num_item + 1, user_item_pairs
 
 
 class CFGraphDataset(Dataset):
     """LightGCN Graph CF Structure"""
 
-    def __init__(self, path: str, adj_style: str):
+    def __init__(self, path: str, adj_style: str, sampling_method="uniform"):
         """
         Args:
             path: Path to dataset txt file
@@ -60,13 +60,20 @@ class CFGraphDataset(Dataset):
             "lightgcn",
             "hccf",
         ], f"{adj_style=}, only accepts ['lightgcn', 'hccf']"
+
+        assert sampling_method in ["uniform", "popularity"]
+
         self._path = path
-        graph, users, num_item, user_interact_pair = load_graph_dataset(path)
+        graph, users, num_item, user_item_pairs = load_graph_dataset(path)
+        num_interactions = len(user_item_pairs)
 
         self._users = users
-        self._users_interact_pair = user_interact_pair
+        self._num_interactions = num_interactions
         self._graph = graph
+
+        self._user_item_pairs = user_item_pairs
         self._num_item = num_item
+        self.sampling_method = sampling_method
 
         if adj_style == "lightgcn":
             self._norm_adj = calculate_sparse_graph_adj_norm(
@@ -82,15 +89,32 @@ class CFGraphDataset(Dataset):
 
         else:
             raise ValueError(f"{adj_style=} is not supported")
-        self.per_user_num = len(user_interact_pair) // self.num_users
+        self.per_user_num = num_interactions // self.num_users
         self.dataset_length = self.num_users * self.per_user_num
 
     def __len__(self):
-        # return len(self._users)
-        # return len(self._users_interact_pair)
-        return self.dataset_length
+        sampling_method = self.sampling_method
+        if sampling_method == "uniform":
+            return self.dataset_length
+        elif sampling_method == "popularity":
+            return len(self._user_item_pairs)
 
-    def __getitem__(self, idx) -> Tuple[int, int, int]:
+    def __getitem__(self, idx):
+        sampling_method = self.sampling_method
+        if self.sampling_method == "uniform":
+            return self._get_uniform(idx)
+        elif sampling_method == "popularity":
+            return self._get_popularity(idx)
+
+    def _get_popularity(self, idx) -> Tuple[int, int, int]:
+        user_idx, pos_item_idx = self._user_item_pairs[idx]
+        neg_item_idx = pos_item_idx
+
+        while neg_item_idx in self._graph[user_idx]:
+            neg_item_idx = random.randint(0, self.num_items - 1)
+        return user_idx, pos_item_idx, neg_item_idx
+
+    def _get_uniform(self, idx) -> Tuple[int, int, int]:
         user_idx = idx // self.per_user_num
         if not self._graph[user_idx]:
             raise ValueError("Exists user with no item interaction")
@@ -104,14 +128,19 @@ class CFGraphDataset(Dataset):
 
     def describe(self):
         # Minor analyze for dataset
-        logger.info("Num user:", len(self._users), "- Num item:", self._num_item)
+        msg = f"Num user: {self.num_users} - Num item: {self.num_items}"
+        logger.info(msg)
+        logger.info(f"Num interactions: {self._num_interactions}")
+        logger.info(
+            f"Sparsity: {self._num_interactions / (self.num_users * self.num_items)}"
+        )
 
         stats = []
         for items in self._graph.values():
             stats.append(len(items))
 
-        logger.info("Min degree", min(stats))
-        logger.info("Max degree", max(stats))
+        logger.info(f"Min degree - {min(stats)}")
+        logger.info(f"Max degree - {max(stats)}")
 
     @property
     def num_users(self):
@@ -138,7 +167,7 @@ class TestCFGraphDataset(Dataset):
         """
         self._path = path
         self._path = path
-        graph, users, num_item, num_interactions = load_graph_dataset(path)
+        graph, users, num_item, _ = load_graph_dataset(path)
 
         self._users = users
         self._graph = graph
