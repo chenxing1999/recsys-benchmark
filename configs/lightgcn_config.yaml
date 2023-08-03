@@ -8,19 +8,20 @@ model:
 
 train_dataloader:
   dataset:
-    path: dataset/cf/gowalla/train.txt
+    path: dataset/cf/yelp2018/train.txt
     adj_style: lightgcn # lightgcn or hccf
+    sampling_method: popularity
   num_workers: 4
   batch_size: 2048
 
 test_dataloader:
   dataset:
-    path: dataset/cf/gowalla/test.txt
+    path: dataset/cf/yelp2018/test.txt
   batch_size: 2048
   num_workers: 4
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 100
+num_epochs: 20
 log_step: 100
 
 weight_decay: 0.0001

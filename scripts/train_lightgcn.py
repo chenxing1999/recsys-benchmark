@@ -30,8 +30,14 @@ def train_epoch(
     model.to(device)
     adj = adj.to(device)
 
-    cum_loss = 0
     num_sample = 0
+
+    loss_dict = dict(
+        loss=0,
+        reg_loss=0,
+        rec_loss=0,
+        cl_loss=0,
+    )
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
         all_user_emb, all_item_emb = model.get_emb_table(adj)
@@ -44,7 +50,7 @@ def train_epoch(
         pos_embs = torch.index_select(all_item_emb, 0, pos_items)
         neg_embs = torch.index_select(all_item_emb, 0, neg_items)
 
-        loss = bpr_loss(user_embs, pos_embs, neg_embs)
+        rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
 
         reg_loss = 0
         if weight_decay > 0:
@@ -60,34 +66,44 @@ def train_epoch(
 
             tmp_pos_idx = torch.unique(pos_items)
             tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
+            view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
 
-            info_nce_loss = info_nce(
-                tmp_user_embs, tmp_user_embs, temperature
-            ) + info_nce(tmp_pos_embs, tmp_pos_embs, temperature)
+            info_nce_loss = info_nce(view1, view1, temperature)
 
             info_nce_loss = info_nce_loss * info_nce_weight
+            loss_dict["cl_loss"] += info_nce_loss.item()
 
-        loss = loss + weight_decay * reg_loss + info_nce_loss
+        loss = rec_loss + weight_decay * reg_loss + info_nce_loss
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        cum_loss += loss.item() * users.shape[0]
+
+        loss_dict["loss"] += loss.item()
+        loss_dict["reg_loss"] += reg_loss.item()
+        loss_dict["rec_loss"] += rec_loss.item()
+
         num_sample += users.shape[0]
 
         # Logging
         if log_step and idx % log_step == 0:
-            msg = (
-                f"Idx: {idx}"
-                f" - Loss: {cum_loss / num_sample}"
-                f" - Reg Loss: {reg_loss.item()}"
-            )
+            msg = f"Idx: {idx}"
+
+            for metric, value in loss_dict.items():
+                if value > 0:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.2}"
+
             loguru.logger.info(msg)
 
         if profiler:
             profiler.step()
 
-    return cum_loss / num_sample
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        loss_dict[metric] = avg
+
+    return loss_dict
 
 
 @torch.no_grad()
@@ -200,10 +216,7 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info("Load train dataset...")
     train_dataloader_config = config["train_dataloader"]
     train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset = CFGraphDataset(
-        train_dataset_config["path"],
-        train_dataset_config["adj_style"],
-    )
+    train_dataset = CFGraphDataset(**train_dataset_config)
     logger.info("Successfully load train dataset")
     train_dataset.describe()
     train_dataloader = DataLoader(
@@ -264,7 +277,7 @@ def main(argv: Optional[Sequence[str]] = None):
     val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
-        loss = train_epoch(
+        loss_dict = train_epoch(
             train_dataloader,
             model,
             optimizer,
@@ -278,7 +291,8 @@ def main(argv: Optional[Sequence[str]] = None):
         logger.log_metric(
             "train/peak_cuda_mem", torch.cuda.max_memory_allocated(), epoch_idx
         )
-        logger.log_metric("train/loss", loss, epoch_idx)
+        for metric, value in loss_dict.items():
+            logger.log_metric(f"train/{metric}", value, epoch_idx)
 
         if epoch_idx % config["validate_step"] == 0:
             val_metrics = validate_epoch(
