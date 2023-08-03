@@ -57,5 +57,4 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/tmp
-  log_name: popularity
+  log_folder: logs/lightgcn
