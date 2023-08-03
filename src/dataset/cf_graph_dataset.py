@@ -131,9 +131,9 @@ class CFGraphDataset(Dataset):
         msg = f"Num user: {self.num_users} - Num item: {self.num_items}"
         logger.info(msg)
         logger.info(f"Num interactions: {self._num_interactions}")
-        logger.info(
-            f"Sparsity: {self._num_interactions / (self.num_users * self.num_items)}"
-        )
+
+        sparsity = self._num_interactions / (self.num_users * self.num_items)
+        logger.info(f"Sparsity: {sparsity}")
 
         stats = []
         for items in self._graph.values():
