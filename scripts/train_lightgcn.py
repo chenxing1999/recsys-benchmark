@@ -226,8 +226,12 @@ def main(argv: Optional[Sequence[str]] = None):
         num_workers=train_dataloader_config["num_workers"],
     )
 
+    if config["run_test"]:
+        val_dataloader_config = config["test_dataloader"]
+    else:
+        val_dataloader_config = config["val_dataloader"]
+
     logger.info("Load val dataset...")
-    val_dataloader_config = config["test_dataloader"]
     val_dataset = TestCFGraphDataset(val_dataloader_config["dataset"]["path"])
     val_dataloader = DataLoader(
         val_dataset,
@@ -236,7 +240,7 @@ def main(argv: Optional[Sequence[str]] = None):
         collate_fn=TestCFGraphDataset.collate_fn,
         num_workers=val_dataloader_config["num_workers"],
     )
-    logger.info("Successfully load test dataset")
+    logger.info("Successfully load val dataset")
 
     checkpoint_folder = os.path.dirname(config["checkpoint_path"])
     os.makedirs(checkpoint_folder, exist_ok=True)
@@ -248,6 +252,21 @@ def main(argv: Optional[Sequence[str]] = None):
         model_config,
     )
 
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    if config["run_test"]:
+        checkpoint = torch.load(config["checkpoint_path"])
+        model.load_state_dict(checkpoint["state_dict"])
+
+        val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
+        for key, value in val_metrics.items():
+            logger.info(f"{key} - {value:.4f}")
+
+        return
+
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config["learning_rate"],
@@ -257,11 +276,6 @@ def main(argv: Optional[Sequence[str]] = None):
     for p in model.parameters():
         num_params += p.numel()
     logger.log_metric("num_params", num_params)
-
-    if torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
 
     logger.info(f"Model config: {model_config}")
 
@@ -294,7 +308,7 @@ def main(argv: Optional[Sequence[str]] = None):
         for metric, value in loss_dict.items():
             logger.log_metric(f"train/{metric}", value, epoch_idx)
 
-        if epoch_idx % config["validate_step"] == 0:
+        if (epoch_idx + 1) % config["validate_step"] == 0:
             val_metrics = validate_epoch(
                 train_dataset,
                 val_dataloader,
