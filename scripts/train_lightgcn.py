@@ -3,6 +3,7 @@ import os
 from typing import Dict, List, Optional, Sequence, Set, Union
 
 import loguru
+import psutil
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -12,6 +13,28 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore, get_graph_model
+
+
+def get_env_metrics() -> Dict[str, float]:
+    """Utils function for quick benchmark performance
+
+    Returns: a metric dictionary that contains
+        various computation wise metrics such as cpu mem and peak CUDA mem
+
+    Note: Copied and modified from RecBole
+    """
+
+    memory_used = psutil.Process(os.getpid()).memory_info().rss
+    cpu_usage = psutil.cpu_percent(interval=1)
+    peak_cuda_mem = torch.cuda.max_memory_allocated()
+    cur_cuda_mem = torch.cuda.memory_allocated()
+
+    return {
+        "cur_cpu_memory": memory_used,
+        "cur_cpu_usage": cpu_usage,
+        "cur_cuda_mem": cur_cuda_mem,
+        "peak_cuda_mem": peak_cuda_mem,
+    }
 
 
 def train_epoch(
@@ -291,7 +314,7 @@ def main(argv: Optional[Sequence[str]] = None):
     val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
-        loss_dict = train_epoch(
+        train_metrics = train_epoch(
             train_dataloader,
             model,
             optimizer,
@@ -302,10 +325,8 @@ def main(argv: Optional[Sequence[str]] = None):
             info_nce_weight=config["info_nce_weight"],
         )
 
-        logger.log_metric(
-            "train/peak_cuda_mem", torch.cuda.max_memory_allocated(), epoch_idx
-        )
-        for metric, value in loss_dict.items():
+        train_metrics.update(get_env_metrics())
+        for metric, value in train_metrics.items():
             logger.log_metric(f"train/{metric}", value, epoch_idx)
 
         if (epoch_idx + 1) % config["validate_step"] == 0:
@@ -318,7 +339,8 @@ def main(argv: Optional[Sequence[str]] = None):
                 profiler=val_prof,
             )
 
-            val_metrics["peak_cuda_mem"] = torch.cuda.max_memory_allocated()
+            val_metrics.update(get_env_metrics())
+
             for key, value in val_metrics.items():
                 logger.log_metric(f"val/{key}", value, epoch_idx)
 
