@@ -73,8 +73,10 @@ class LightGCN(IGraphBaseCore):
         res = embs
         step = embs
         for _ in range(self.num_layers):
+            # Where memory peaked
             step = matrix @ step
             res = res + step
+
         res = res / (self.num_layers + 1)
         return torch.split(res, (self._num_user, self._num_item))
 
