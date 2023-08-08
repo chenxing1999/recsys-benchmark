@@ -1,6 +1,6 @@
 model:
   name: lightgcn # lightgcn,hccf
-  num_layers: 2
+  num_layers: 3
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
@@ -26,16 +26,16 @@ test_dataloader:
   batch_size: 2048
   num_workers: 4
 
-run_test: False
+run_test: false
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 20
+num_epochs: 1000
 log_step: 100
 
 weight_decay: 0.0001
 info_nce_weight: 0
 learning_rate: 0.001
-validate_step: 5
+validate_step: 10
 
 enable_profile: false
 
@@ -65,4 +65,4 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/lightgcn
+  log_folder: logs/original
