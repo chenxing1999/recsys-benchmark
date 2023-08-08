@@ -4,15 +4,21 @@ model:
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
-    name: vanilla # vanilla, qr, dhe,
+    name: vanilla
 
 train_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/train.txt
+    path: dataset/cf/yelp2018/model_train.txt
     adj_style: lightgcn # lightgcn or hccf
     sampling_method: popularity
   num_workers: 4
   batch_size: 2048
+
+val_dataloader:
+  dataset:
+    path: dataset/cf/yelp2018/model_val.txt
+  batch_size: 2048
+  num_workers: 4
 
 test_dataloader:
   dataset:
@@ -20,14 +26,16 @@ test_dataloader:
   batch_size: 2048
   num_workers: 4
 
+run_test: false
+
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 20
+num_epochs: 1000
 log_step: 100
 
 weight_decay: 0.0001
-info_nce_weight: 0.1
+info_nce_weight: 0
 learning_rate: 0.001
-validate_step: 1
+validate_step: 10
 
 enable_profile: false
 
@@ -57,4 +65,4 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/lightgcn
+  log_folder: logs/original

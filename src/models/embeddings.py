@@ -44,6 +44,7 @@ class QRHashingEmbedding(IEmbedding):
         hidden_size: int,
         divider: Optional[int] = None,
         operation: Literal["cat", "add", "mult"] = "mult",
+        initializer="uniform",
     ):
         """
         Args:
@@ -79,7 +80,21 @@ class QRHashingEmbedding(IEmbedding):
         self._divider = divider
         self._num_item = num_item
 
-        self._init_normal_weight()
+        if initializer == "normal":
+            self._init_normal_weight()
+        elif initializer == "uniform":
+            self._init_uniform_weight()
+
+    def _init_uniform_weight(self):
+        # Haven't found method to generate emb1 and emb2
+        # so that ops(emb1, emb2) will have uniform(-a, a).
+        # Note: Orignal QR init method use uniform(sqrt(1 / num_categories), 1)
+        # https://github.com/facebookresearch/dlrm/blob/dee060be6c2f4a89644acbff6b3a36f7c0d5ce39/tricks/qr_embedding_bag.py#L182-L183
+        # But I use uniform(-alpha, alpha) with alpha = sqrt(1 / num_categories)
+
+        alpha = math.sqrt(1 / self._num_item)
+        nn.init.uniform_(self.emb1.weight, alpha, 1)
+        nn.init.uniform_(self.emb2.weight, alpha, 1)
 
     def _init_normal_weight(self):
         std = 0.1

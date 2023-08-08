@@ -36,7 +36,7 @@ class Logger(ILogger):
 
     def log_metric(self, metric_name, value, step=None):
         if isinstance(value, float):
-            msg = f"{metric_name}: {value:.2f}"
+            msg = f"{metric_name}: {value:.4f}"
         else:
             msg = f"{metric_name}: {value}"
 
