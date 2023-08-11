@@ -1,6 +1,9 @@
-from typing import List, Set, Union
+import os
+from typing import Dict, List, Set, Union
 
 import numpy as np
+import psutil
+import torch
 
 
 def get_ndcg(
@@ -36,3 +39,25 @@ def get_ndcg(
         ndcg += dcg / idcg
     num_users = len(y_pred)
     return ndcg / num_users
+
+
+def get_env_metrics() -> Dict[str, float]:
+    """Utils function for quick benchmark performance
+
+    Returns: a metric dictionary that contains
+        various computation wise metrics such as cpu mem and peak CUDA mem
+
+    Note: Copied and modified from RecBole
+    """
+
+    memory_used = psutil.Process(os.getpid()).memory_info().rss
+    cpu_usage = psutil.cpu_percent(interval=1)
+    peak_cuda_mem = torch.cuda.max_memory_allocated()
+    cur_cuda_mem = torch.cuda.memory_allocated()
+
+    return {
+        "cur_cpu_memory": memory_used,
+        "cur_cpu_usage": cpu_usage,
+        "cur_cuda_mem": cur_cuda_mem,
+        "peak_cuda_mem": peak_cuda_mem,
+    }
