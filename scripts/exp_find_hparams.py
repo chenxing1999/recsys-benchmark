@@ -35,7 +35,9 @@ def parse_args():
         help="Run name, default: basename of log_folder",
     )
     parser.add_argument(
-        "--enable_sgl_wa", default=True, help="Enable SGL-WA backbone or not"
+        "--disable_sgl_wa",
+        action="store_true",
+        help="Disable SGL-WA backbone or not. Default: False",
     )
     args = parser.parse_args()
 
@@ -48,6 +50,8 @@ def parse_args():
     if args.run_name is None:
         name = os.path.basename(args.log_folder)
         args.run_name = name
+
+    setattr(args, "enable_sgl_wa", not args.disable_sgl_wa)
 
     return args
 

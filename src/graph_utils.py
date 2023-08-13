@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 import torch
 
@@ -39,7 +39,7 @@ def get_adj(
         indices,
         values.coalesce().values(),
         size=(num_user, num_item),
-    )
+    ).coalesce()
 
     return adj
 
@@ -48,6 +48,7 @@ def calculate_sparse_graph_adj_norm(
     graph: Dict[int, List[int]],
     num_item: int,
     num_user: Optional[int] = None,
+    layout: Literal["coo", "csr"] = "csr",
 ) -> torch.Tensor:
     """Calculate A_hat from LightGCN paper based on input parameter
 
@@ -91,5 +92,7 @@ def calculate_sparse_graph_adj_norm(
         values.coalesce().values(),
         size=(num_user + num_item, num_item + num_user),
     )
+    if layout == "csr":
+        norm_adj = norm_adj.to_sparse_csr()
 
     return norm_adj

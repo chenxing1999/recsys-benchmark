@@ -34,7 +34,10 @@ class LightGCN(IGraphBaseCore):
         self._num_user = num_user
         self._num_item = num_item
 
-        self.sparse_dropout = SparseDropout(p_dropout)
+        if p_dropout > 0:
+            self.sparse_dropout = SparseDropout(p_dropout)
+        else:
+            self.sparse_dropout = torch.nn.Identity(p_dropout)
 
     def _init_embedding(self, num_user, num_item, hidden_size):
         self.user_emb_table = get_embedding(

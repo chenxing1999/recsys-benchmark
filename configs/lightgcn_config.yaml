@@ -35,7 +35,7 @@ log_step: 100
 weight_decay: 0.0001
 info_nce_weight: 0
 learning_rate: 0.001
-validate_step: 10
+validate_step: 1
 
 enable_profile: false
 
@@ -66,3 +66,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/original
+  log_name: refactor-csr
