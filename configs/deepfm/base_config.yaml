@@ -7,14 +7,14 @@ model:
   embedding_config:
     name: vanilla
 
-sample_train_dataloader:
+train_dataloader:
   dataset:
     path: /home/xing/Workspace/phd/raw_data/samples/train_criteo.txt
     cache_path: .criteo/samples.bin
   num_workers: 4
   batch_size: 2048
 
-train_dataloader:
+_train_dataloader:
   dataset:
     path: /home/xing/Workspace/phd/raw_data/criteo/train.txt
     cache_path: .criteo/train.bin

@@ -1,7 +1,7 @@
 import argparse
 import gc
 import os
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import loguru
 import torch
@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
 from src import metrics
-from src.dataset.criteo import CriteoDataset
+from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 
@@ -156,24 +156,48 @@ def init_profiler(config: Dict):
     return prof
 
 
+def get_dataset_cls(loader_config) -> str:
+    num_workers = loader_config.get("num_workers", 0)
+    shuffle = loader_config.get("shuffle", False)
+
+    if num_workers == 0 and not shuffle:
+        return "iter"
+    else:
+        return "normal"
+
+
+NAME_TO_DATASET_CLS = {
+    "iter": CriteoIterDataset,
+    "normal": CriteoDataset,
+}
+
+
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
 
     # Loading train dataset
     logger.info("Load train dataset...")
+
     train_dataloader_config = config["train_dataloader"]
+    train_dataset_cls = get_dataset_cls(train_dataloader_config)
+    logger.info(f"Train dataset type: {train_dataset_cls}")
+
     train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset = CriteoDataset(**train_dataset_config)
+    train_dataset: Union[CriteoIterDataset, CriteoDataset]
+    train_dataset_cls = NAME_TO_DATASET_CLS[train_dataset_cls]
+    train_dataset = train_dataset_cls(**train_dataset_config)
+
     logger.info("Successfully load train dataset")
     train_dataset.describe()
     train_dataloader = DataLoader(
         train_dataset,
         train_dataloader_config["batch_size"],
-        shuffle=False,
+        shuffle=train_dataloader_config.get("shuffle", False),
         num_workers=train_dataloader_config["num_workers"],
     )
 
+    # Loading val dataset
     if config["run_test"]:
         val_dataloader_config = config["test_dataloader"]
     else:
@@ -183,8 +207,12 @@ def main(argv: Optional[Sequence[str]] = None):
     val_dataset_config = val_dataloader_config["dataset"]
 
     # TODO: Refactor later
+    val_dataset_cls = get_dataset_cls(val_dataloader_config)
+    logger.info(f"Val dataset type: {val_dataset_cls}")
+    val_dataset_cls = NAME_TO_DATASET_CLS[val_dataset_cls]
     train_info_to_val = train_dataset.pop_info()
-    val_dataset = CriteoDataset(**val_dataset_config, **train_info_to_val)
+
+    val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
     val_dataset.pop_info()
 
     val_dataloader = DataLoader(
@@ -279,13 +307,8 @@ def main(argv: Optional[Sequence[str]] = None):
                         "val_metrics": val_metrics,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
-    except (KeyboardInterrupt, Exception):
+    except KeyboardInterrupt:
         pass
-    finally:
-        pass
-
-        # shared_memory.SharedMemory(train_dataset.name).unlink()
-        # shared_memory.SharedMemory(val_dataset.name).unlink()
 
     if config["enable_profile"]:
         train_prof.stop()

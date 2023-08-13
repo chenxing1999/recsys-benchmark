@@ -1,41 +1,27 @@
-import math
 import os
 from collections import defaultdict
-from functools import lru_cache
-from typing import Any, DefaultDict, Dict, Final, Optional, Set
+from typing import DefaultDict, Dict, Optional
 
 import torch
 from loguru import logger
 from torch.utils.data import IterableDataset
 
+from .base import ICriteoDatset
+from .utils import convert_numeric_feature, get_cache_data
+
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
 FeatMapper = Dict[int, Dict[str, int]]
 
 
-@lru_cache(maxsize=None)
-def convert_numeric_feature(val: str) -> str:
-    if val == "":
-        return "NULL"
-    v = int(val)
-    if v > 2:
-        return str(int(math.log(v) ** 2))
-    else:
-        return str(v - 2)
-
-
-# Construct feat mapper and default
-class CriteoDataset(IterableDataset):
+class CriteoIterDataset(IterableDataset, ICriteoDatset):
     """
-    Iterable version of src.dataset.criteo.CriteoDataset
+    Iterable version of src.dataset.criteo.criteo.CriteoDataset
 
     This version consume less memory and run slightly faster
         if your num_workers less than 4
     Note that this version doesn't allow you to shuffle dataset
         and set num_workers != 0
     """
-
-    NUM_INT_FEATS: Final[int] = 13
-    NUM_FEATS: Final[int] = 39
 
     def __init__(
         self,
@@ -59,11 +45,10 @@ class CriteoDataset(IterableDataset):
             feat_mappers: If not None, always use this instead of from `cache` or `path`
             defaults: If not None, always use this instead of from `cache` or `path`
         """
-        self.min_threshold = min_threshold
 
         if not os.path.exists(cache_path):
             logger.info("Creating cache data...")
-            cached_data = self._get_cache_data(path)
+            cached_data = get_cache_data(path, min_threshold, False)
 
             if feat_mappers:
                 cached_data["feat_mappers"] = feat_mappers
@@ -122,65 +107,6 @@ class CriteoDataset(IterableDataset):
 
             yield torch.tensor(feats), label
 
-    def _get_cache_data(self, path) -> Dict[str, Any]:
-        """Get cache object
-
-        Args:
-            path: Path to original train.txt / test.txt file
-                of CriteoDataset
-
-        Returns: Dict[str, Any]
-
-            feat_mappers: (FeatMapper)
-                feat_mapper[feat_idx][feat_value] = feat_id corresponding to feature_idx
-
-            defaults (Dict[int, int])
-                defaults[feat_idx] = default value for OOV feature of feat_idx
-
-            num_data (int)
-            line_idx_to_byte_loc: Dict[int, int]:
-        """
-
-        feat_cnts: DefaultDict[int, DefaultDict[int, int]] = defaultdict(
-            lambda: defaultdict(int)
-        )
-        counts = 0
-        line_idx_to_byte_loc = {}
-        with open(path) as fin:
-            loc = 0
-            for line in fin:
-                loc += len(line)
-                values = line.rstrip("\n").split("\t")
-                if len(values) != self.NUM_FEATS + 1:
-                    continue
-
-                for i in range(1, self.NUM_INT_FEATS + 1):
-                    feat_cnts[i][convert_numeric_feature(values[i])] += 1
-                for i in range(self.NUM_INT_FEATS + 1, self.NUM_FEATS + 1):
-                    feat_cnts[i][values[i]] += 1
-
-                line_idx_to_byte_loc[counts] = loc - len(line)
-                counts += 1
-
-        # feat_idx_to_set map from FeatureIndex to Set of feature values
-        feat_idx_to_set: Dict[int, Set[int]] = {
-            i: {feat for feat, c in cnt.items() if c >= self.min_threshold}
-            for i, cnt in feat_cnts.items()
-        }
-
-        feat_mappers: Dict[int, Dict[str, int]] = {
-            i: {feat: idx for idx, feat in enumerate(cnt)}
-            for i, cnt in feat_idx_to_set.items()
-        }
-        defaults = {i: len(cnt) for i, cnt in feat_mappers.items()}
-
-        return {
-            "feat_mappers": feat_mappers,
-            "defaults": defaults,
-            "line_idx_to_byte_loc": line_idx_to_byte_loc,
-            "num_data": counts,
-        }
-
     def pop_info(self):
         # TODO: Refactor this
         feat_mappers = self._feat_mappers
@@ -193,8 +119,5 @@ class CriteoDataset(IterableDataset):
         }
 
     def describe(self):
-        print("Num data:", self.num_data)
-
-
-if __name__ == "__main__":
-    dataset = CriteoDataset("", ".criteo/train.bin")
+        logger.info("Iter Criteo Dataset")
+        logger.info("Num data:", self.num_data)
