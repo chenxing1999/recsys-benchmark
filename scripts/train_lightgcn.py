@@ -325,7 +325,7 @@ def main(argv: Optional[Sequence[str]] = None):
             info_nce_weight=config["info_nce_weight"],
         )
 
-        train_metrics.update(get_env_metrics())
+        train_metrics.update(metrics.get_env_metrics())
         for metric, value in train_metrics.items():
             logger.log_metric(f"train/{metric}", value, epoch_idx)
 
@@ -339,7 +339,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 profiler=val_prof,
             )
 
-            val_metrics.update(get_env_metrics())
+            val_metrics.update(metrics.get_env_metrics())
 
             for key, value in val_metrics.items():
                 logger.log_metric(f"val/{key}", value, epoch_idx)
