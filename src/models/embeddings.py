@@ -294,3 +294,47 @@ def get_embedding(
 
     embedding_config["name"] = name
     return emb
+
+
+class PepEmbeeding(IEmbedding):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_item: int,
+        ori_weight_path: str,
+        init_threshold: float = 0.5,
+    ):
+        super().__init__()
+        self.emb = nn.Embedding(num_item, hidden_size)
+        nn.init.xavier_uniform_(self.weight)
+
+        dir_name = os.path.dirname(ori_weight_path)
+        os.makedirs(dir_name, exist_ok=True)
+
+    def get_weight(self):
+        return self.emb.weight
+
+    def init_threshold(self, init) -> nn.Parameter:
+        """
+
+        threshold_type
+            global: single threshold for all item
+            dimension: threshold for all dimension
+
+
+        """
+        if self.threshold_type == "global":
+            s = nn.Parameter(init * torch.ones(1))
+        elif self.threshold_type == "dimension":
+            s = nn.Parameter(init * torch.ones([self.latent_dim]))
+        elif self.threshold_type == "feature":
+            s = nn.Parameter(init * torch.ones([self.feature_num, 1]))
+        elif self.threshold_type == "field":
+            s = nn.Parameter(init * torch.ones([self.field_num, 1]))
+        elif self.threshold_type == "feature_dim":
+            s = nn.Parameter(init * torch.ones([self.feature_num, self.latent_dim]))
+        elif self.threshold_type == "field_dim":
+            s = nn.Parameter(init * torch.ones([self.field_num, self.latent_dim]))
+        else:
+            raise ValueError("Invalid threshold_type: {}".format(self.threshold_type))
+        return s
