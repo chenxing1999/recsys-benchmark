@@ -1,3 +1,4 @@
+import copy
 import json
 import math
 import os
@@ -5,6 +6,7 @@ from typing import Dict, List, Literal, Optional, Union
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class IEmbedding(nn.Module):
@@ -271,14 +273,18 @@ def get_embedding(
     embedding_config: Dict,
     num_item: int,
     hidden_size: int,
+    field_name: str = "",
 ) -> IEmbedding:
     name = embedding_config["name"]
+    embedding_config = copy.deepcopy(embedding_config)
     embedding_config.pop("name")
 
     name_to_cls = {
         "vanilla": VanillaEmbedding,
         "qr": QRHashingEmbedding,
         "dhe": DHEEmbedding,
+        "pep": PepEmbeeding,
+        "pep_retrain": RetrainPepEmbeeding,
     }
     if name == "vanilla":
         emb = VanillaEmbedding(
@@ -289,6 +295,8 @@ def get_embedding(
     elif name not in name_to_cls:
         raise NotImplementedError()
     else:
+        if name.startswith("pep"):
+            embedding_config["field_name"] = field_name
         cls = name_to_cls[name]
         emb = cls(num_item, hidden_size, **embedding_config)
 
@@ -297,24 +305,58 @@ def get_embedding(
 
 
 class PepEmbeeding(IEmbedding):
+    """PEP Embedding proposed in
+        https://arxiv.org/pdf/2101.07577.pdf
+
+    Original implementation:
+        https://github.com/ssui-liu/learnable-embed-sizes-for-RecSys
+    """
+
     def __init__(
         self,
-        hidden_size: int,
         num_item: int,
+        hidden_size: int,
         ori_weight_path: str,
-        init_threshold: float = 0.5,
+        field_name: str = "",
+        init_threshold: float = -150,
+        threshold_type: str = "feature_dim",
     ):
+        """
+        Args:
+            num_item
+            hidden_size
+            ori_weight_path: Path to original weight for later retrain
+                with Lottery Ticket
+            init_threshold: Initialize value for s
+            threshold_type: Support `feature_dim`, `feature`, `dimension` and `global
+        """
         super().__init__()
+
+        # Initialize and Save the original weight to get winning ticket later
         self.emb = nn.Embedding(num_item, hidden_size)
-        nn.init.xavier_uniform_(self.weight)
+        nn.init.xavier_uniform_(self.emb.weight)
 
         dir_name = os.path.dirname(ori_weight_path)
         os.makedirs(dir_name, exist_ok=True)
+        torch.save({"state_dict": self.emb.state_dict()}, ori_weight_path)
+
+        self.threshold_type = threshold_type
+        self.s = self.init_threshold(init_threshold, num_item, hidden_size)
 
     def get_weight(self):
-        return self.emb.weight
+        sparse_weight = self.soft_threshold(self.emb.weight, self.s)
+        return sparse_weight
 
-    def init_threshold(self, init) -> nn.Parameter:
+    def forward(self, x):
+        sparse_weight = self.soft_threshold(self.emb.weight, self.s)
+        xv = F.embedding(x, sparse_weight)
+
+        return xv
+
+    def soft_threshold(self, v, s):
+        return torch.sign(v) * torch.relu(torch.abs(v) - torch.sigmoid(s))
+
+    def init_threshold(self, init, num_item, hidden_size) -> nn.Parameter:
         """
 
         threshold_type
@@ -326,15 +368,55 @@ class PepEmbeeding(IEmbedding):
         if self.threshold_type == "global":
             s = nn.Parameter(init * torch.ones(1))
         elif self.threshold_type == "dimension":
-            s = nn.Parameter(init * torch.ones([self.latent_dim]))
+            s = nn.Parameter(init * torch.ones([hidden_size]))
         elif self.threshold_type == "feature":
-            s = nn.Parameter(init * torch.ones([self.feature_num, 1]))
+            s = nn.Parameter(init * torch.ones([num_item, 1]))
         elif self.threshold_type == "field":
-            s = nn.Parameter(init * torch.ones([self.field_num, 1]))
+            raise NotImplementedError()
         elif self.threshold_type == "feature_dim":
-            s = nn.Parameter(init * torch.ones([self.feature_num, self.latent_dim]))
+            s = nn.Parameter(init * torch.ones([num_item, hidden_size]))
         elif self.threshold_type == "field_dim":
-            s = nn.Parameter(init * torch.ones([self.field_num, self.latent_dim]))
+            raise NotImplementedError()
         else:
             raise ValueError("Invalid threshold_type: {}".format(self.threshold_type))
         return s
+
+
+class RetrainPepEmbeeding(IEmbedding):
+    """ """
+
+    def __init__(
+        self,
+        num_item,
+        hidden_size,
+        finish_weight_path,
+        ori_weight_path: Optional[str] = None,
+        field_name: str = "",
+    ):
+        super().__init__()
+        self.emb = nn.Embedding(num_item, hidden_size)
+
+        ori_weight_path += field_name
+        if ori_weight_path:
+            original_state_dict = torch.load(ori_weight_path, map_location="cpu")[
+                "state_dict"
+            ]
+            self.emb.load_state_dict(original_state_dict)
+
+        finish_weight = torch.load(finish_weight_path, map_location="cpu")["state_dict"]
+        import pdb
+
+        pdb.set_trace()
+        weight = finish_weight["emb.weight"]
+        s = finish_weight["s"]
+        self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
+
+        print(self.mask.sum() / torch.prod(torch.tensor(self.mask.size())))
+
+    def get_weight(self, x):
+        sparse_emb = self.emb.weight * self.mask
+        return sparse_emb
+
+    def forward(self, x):
+        sparse_emb = self.emb.weight * self.mask
+        return F.embedding(x, sparse_emb)
