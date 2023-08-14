@@ -49,6 +49,7 @@ class CriteoDataset(Dataset, ICriteoDatset):
 
         if not os.path.exists(cache_path):
             logger.info("Creating cache data...")
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             cached_data = get_cache_data(path, min_threshold, save_line=True)
 
             if feat_mappers:
@@ -124,6 +125,7 @@ class CriteoDataset(Dataset, ICriteoDatset):
     def describe(self):
         logger.info("Normal Criteo Dataset")
         logger.info("Num data:", self.num_data)
+        logger.info("Field dims", self.field_dims)
 
 
 if __name__ == "__main__":
