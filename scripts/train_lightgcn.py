@@ -63,7 +63,7 @@ def train_epoch(
     )
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
-        all_user_emb, all_item_emb = model.get_emb_table(adj)
+        all_user_emb, all_item_emb = model(adj)
 
         users = users.to(device)
         pos_items = pos_items.to(device)
@@ -159,7 +159,7 @@ def validate_epoch(
     adj = adj.to(device)
 
     # num_user + num_item, hidden_dim
-    user_embs, item_embs = model.get_emb_table(adj)
+    user_embs, item_embs = model(adj)
 
     ndcg = 0
     all_y_pred = []
@@ -311,7 +311,6 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_ndcg = 0
     num_epochs = config["num_epochs"]
-    val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = train_epoch(
