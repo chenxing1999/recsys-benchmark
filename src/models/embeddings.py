@@ -5,6 +5,7 @@ import os
 from typing import Dict, List, Literal, Optional, Union
 
 import torch
+from loguru import logger
 from torch import nn
 from torch.nn import functional as F
 
@@ -316,10 +317,12 @@ class PepEmbeeding(IEmbedding):
         self,
         num_item: int,
         hidden_size: int,
-        ori_weight_path: str,
+        ori_weight_dir: str,
+        checkpoint_weight_dir: str,
         field_name: str = "",
         init_threshold: float = -150,
         threshold_type: str = "feature_dim",
+        sparsity: Optional[List[float]] = None,
     ):
         """
         Args:
@@ -329,19 +332,30 @@ class PepEmbeeding(IEmbedding):
                 with Lottery Ticket
             init_threshold: Initialize value for s
             threshold_type: Support `feature_dim`, `feature`, `dimension` and `global
+            sparsity
         """
         super().__init__()
+
+        if sparsity is None:
+            sparsity = [0.8, 0.9, 0.99]
+        self.sparsity = list(sorted(sparsity))
+        self._cur_min_spar_idx = 0
 
         # Initialize and Save the original weight to get winning ticket later
         self.emb = nn.Embedding(num_item, hidden_size)
         nn.init.xavier_uniform_(self.emb.weight)
 
-        dir_name = os.path.dirname(ori_weight_path)
-        os.makedirs(dir_name, exist_ok=True)
+        os.makedirs(ori_weight_dir, exist_ok=True)
+        ori_weight_path = os.path.join(ori_weight_dir, field_name + ".pth")
         torch.save({"state_dict": self.emb.state_dict()}, ori_weight_path)
 
         self.threshold_type = threshold_type
         self.s = self.init_threshold(init_threshold, num_item, hidden_size)
+
+        if field_name:
+            checkpoint_weight_dir = os.path.join(checkpoint_weight_dir, field_name)
+        os.makedirs(checkpoint_weight_dir, exist_ok=True)
+        self.checkpoint_weight_dir = checkpoint_weight_dir
 
     def get_weight(self):
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
@@ -381,6 +395,30 @@ class PepEmbeeding(IEmbedding):
             raise ValueError("Invalid threshold_type: {}".format(self.threshold_type))
         return s
 
+    def _get_sparsity(self):
+        total_params = self.emb.weight.numel()
+        sparse_weight = self.soft_threshold(self.emb.weight, self.s)
+        n_params = (sparse_weight != 0).sum()
+        return 1 - n_params / total_params
+
+    def train_callback(self):
+        """Callback to save weight to `checkpoint_weight_dir`"""
+        with torch.no_grad():
+            cur_sparsity = self._get_sparsity()
+
+        logger.info(f"Cur Sparsity {cur_sparsity}")
+        while (
+            self._cur_min_spar_idx < len(self.sparsity)
+            and self.sparsity[self._cur_min_spar_idx] < cur_sparsity
+        ):
+            sparsity = self.sparsity[self._cur_min_spar_idx]
+            logger.info(f"cur_sparsity is larger than {sparsity}")
+
+            # Save model
+            path = os.path.join(self.checkpoint_weight_dir, f"{sparsity}.pth")
+            torch.save(self.state_dict(), path)
+            self._cur_min_spar_idx += 1
+
 
 class RetrainPepEmbeeding(IEmbedding):
     """ """
@@ -389,7 +427,8 @@ class RetrainPepEmbeeding(IEmbedding):
         self,
         num_item,
         hidden_size,
-        finish_weight_path,
+        checkpoint_weight_dir,
+        sparsity: float,
         ori_weight_path: Optional[str] = None,
         field_name: str = "",
     ):
@@ -403,10 +442,12 @@ class RetrainPepEmbeeding(IEmbedding):
             ]
             self.emb.load_state_dict(original_state_dict)
 
+        finish_weight_path = os.path.join(
+            checkpoint_weight_dir,
+            field_name,
+            f"{sparsity}.pth",
+        )
         finish_weight = torch.load(finish_weight_path, map_location="cpu")["state_dict"]
-        import pdb
-
-        pdb.set_trace()
         weight = finish_weight["emb.weight"]
         s = finish_weight["s"]
         self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
