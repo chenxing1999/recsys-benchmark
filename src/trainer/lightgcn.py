@@ -52,6 +52,7 @@ def train_epoch(
         reg_loss = 0
         if weight_decay > 0:
             reg_loss = model.get_reg_loss(users, pos_items, neg_items)
+            loss_dict["reg_loss"] += reg_loss.item()
 
         # Enable SGL-Without Augmentation for faster converge
         info_nce_loss = 0
@@ -77,7 +78,6 @@ def train_epoch(
         optimizer.step()
 
         loss_dict["loss"] += loss.item()
-        loss_dict["reg_loss"] += reg_loss.item()
         loss_dict["rec_loss"] += rec_loss.item()
 
         num_sample += users.shape[0]
