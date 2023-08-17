@@ -138,7 +138,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     logger.info(f"Model config: {model_config}")
     config["pep_config"]
-    is_pep_retrain = model_config["name"] == "pep_retrain"
+    is_pep_retrain = model_config["embedding_config"]["name"] == "pep_retrain"
 
     train_prof, val_prof = None, None
     if config["enable_profile"]:
@@ -149,6 +149,26 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_ndcg = 0
     num_epochs = config["num_epochs"]
+
+    # Start hacking :)
+    # path = "checkpoints/pep/pep_ori/user.pth"
+    # state = torch.load(path)["state_dict"]
+    # model.user_emb_table.emb.weight.data = state["weight"]
+    # path = "checkpoints/pep_ori/user.pth"
+    # torch.save({"state_dict": state}, path)
+
+    # path = "checkpoints/pep/pep_ori/item.pth"
+    # state = torch.load(path)["state_dict"]
+    # model.item_emb_table.emb.weight.data = state["weight"]
+    # path = "checkpoints/pep_ori/item.pth"
+    # torch.save({"state_dict": state}, path)
+    # end hacking
+
+    if not is_pep_retrain:
+        # get sparsity and store weight if possible
+        model.user_emb_table.train_callback(-1)
+        model.item_emb_table.train_callback(-1)
+
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = train_epoch(
@@ -194,8 +214,8 @@ def main(argv: Optional[Sequence[str]] = None):
 
             if not is_pep_retrain:
                 # get sparsity and store weight if possible
-                model.user_emb_table.train_callback()
-                model.item_emb_table.train_callback()
+                model.user_emb_table.train_callback(epoch_idx)
+                model.item_emb_table.train_callback(epoch_idx)
             else:
                 # do nothing?
                 pass

@@ -7,13 +7,13 @@ model:
     name: pep
     ori_weight_dir: "checkpoints/pep_ori"
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
-    init_threshold: -9
+    init_threshold: -6.5
 
 pep_config: null
 
 train_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/train.txt
+    path: dataset/cf/yelp2018/model_train.txt
     adj_style: lightgcn # lightgcn or hccf
     sampling_method: popularity
   num_workers: 4
@@ -21,7 +21,7 @@ train_dataloader:
 
 val_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/test.txt
+    path: dataset/cf/yelp2018/model_val.txt
   batch_size: 2048
   num_workers: 4
 
@@ -37,8 +37,8 @@ checkpoint_path: checkpoints/checkpoint.pth
 num_epochs: 1000
 log_step: 100
 
-# weight_decay: 0.0001
-weight_decay: 0.01
+weight_decay: 0.001
+# weight_decay: 0.01
 info_nce_weight: 0.1
 learning_rate: 0.001
 validate_step: 1
@@ -71,4 +71,5 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/debug
+  log_folder: logs/pep-debug/
+  log_name: sglwa-initthreshold-6.5-decay1e-3

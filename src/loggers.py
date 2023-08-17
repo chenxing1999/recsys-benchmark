@@ -20,6 +20,8 @@ class ILogger(ABC):
 class Logger(ILogger):
     """Custom logger object to store training log"""
 
+    instance = None
+
     def __init__(self, level="INFO", log_folder="logs", log_name=None):
         self._logger: loguru.Logger = loguru.logger
         if log_name is None:
@@ -33,6 +35,8 @@ class Logger(ILogger):
         self._logger.add(log_file, level=level)
 
         self._summary_writer = SummaryWriter(log_dir)
+
+        Logger.instance = self
 
     def log_metric(self, metric_name, value, step=None):
         if isinstance(value, float):
@@ -50,3 +54,7 @@ class Logger(ILogger):
 
     def info(self, msg):
         self._logger.info(msg)
+
+    @classmethod
+    def get_logger(cls):
+        return cls.instance

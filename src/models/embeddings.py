@@ -352,10 +352,15 @@ class PepEmbeeding(IEmbedding):
         self.threshold_type = threshold_type
         self.s = self.init_threshold(init_threshold, num_item, hidden_size)
 
+        self.field_name = field_name
         if field_name:
             checkpoint_weight_dir = os.path.join(checkpoint_weight_dir, field_name)
         os.makedirs(checkpoint_weight_dir, exist_ok=True)
         self.checkpoint_weight_dir = checkpoint_weight_dir
+
+        from src.loggers import Logger
+
+        self._logger = Logger.get_logger()
 
     def get_weight(self):
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
@@ -399,14 +404,14 @@ class PepEmbeeding(IEmbedding):
         total_params = self.emb.weight.numel()
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
         n_params = (sparse_weight != 0).sum()
-        return 1 - n_params / total_params
+        return (1 - n_params / total_params).item()
 
-    def train_callback(self):
+    def train_callback(self, epoch_idx):
         """Callback to save weight to `checkpoint_weight_dir`"""
         with torch.no_grad():
             cur_sparsity = self._get_sparsity()
 
-        logger.info(f"Cur Sparsity {cur_sparsity}")
+        self._logger.log_metric(f"{self.field_name}/sparsity", cur_sparsity, epoch_idx)
         while (
             self._cur_min_spar_idx < len(self.sparsity)
             and self.sparsity[self._cur_min_spar_idx] < cur_sparsity
@@ -429,14 +434,14 @@ class RetrainPepEmbeeding(IEmbedding):
         hidden_size,
         checkpoint_weight_dir,
         sparsity: float,
-        ori_weight_path: Optional[str] = None,
+        ori_weight_dir: Optional[str] = None,
         field_name: str = "",
     ):
         super().__init__()
         self.emb = nn.Embedding(num_item, hidden_size)
 
-        ori_weight_path += field_name
-        if ori_weight_path:
+        if ori_weight_dir:
+            ori_weight_path = os.path.join(ori_weight_dir, field_name + ".pth")
             original_state_dict = torch.load(ori_weight_path, map_location="cpu")[
                 "state_dict"
             ]
@@ -447,14 +452,15 @@ class RetrainPepEmbeeding(IEmbedding):
             field_name,
             f"{sparsity}.pth",
         )
-        finish_weight = torch.load(finish_weight_path, map_location="cpu")["state_dict"]
+        finish_weight = torch.load(finish_weight_path, map_location="cpu")
         weight = finish_weight["emb.weight"]
         s = finish_weight["s"]
         self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
+        self.mask = self.mask.cuda()
 
         print(self.mask.sum() / torch.prod(torch.tensor(self.mask.size())))
 
-    def get_weight(self, x):
+    def get_weight(self):
         sparse_emb = self.emb.weight * self.mask
         return sparse_emb
 
