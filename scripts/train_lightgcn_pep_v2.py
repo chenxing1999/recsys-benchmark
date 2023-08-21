@@ -37,7 +37,7 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     lr = trial.suggest_float("learning_rate", 5e-4, 1e-2)
     weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2)
     num_layers = trial.suggest_int("num_layers", 1, 4)
-    init_threshold = trial.suggest_float("init_threshold", -15, -5, step=0.1)
+    init_threshold = trial.suggest_float("init_threshold", -10, -5, step=0.1)
 
     name = f"lr{lr:.4f}-decay{weight_decay:.4f}-num_layers{num_layers}"
     if enable_sgl_wa:
@@ -246,8 +246,11 @@ def _main(trial, base_config):
                 # get sparsity and store weight if possible
                 sparsity = model.user_emb_table._get_sparsity()
 
-                if epoch_idx == 5 and sparsity < 60:
+                if epoch_idx == 1 and sparsity < 0.01:
                     raise optuna.TrialPruned()
+                elif epoch_idx == 5:
+                    if sparsity < 0.4 or best_ndcg < 0.002:
+                        raise optuna.TrialPruned()
 
                 model.user_emb_table.train_callback(epoch_idx)
                 model.item_emb_table.train_callback(epoch_idx)
@@ -261,16 +264,30 @@ def _main(trial, base_config):
 
     # get best metric
     sparsity = model.user_emb_table._get_sparsity()
-    if sparsity < 0.8:
-        raise optuna.TrialPruned()
-    return checkpoint["val_metrics"]["ndcg"]
+    # if sparsity < 0.7:
+    #     raise optuna.TrialPruned()
+    return checkpoint["val_metrics"]["ndcg"], sparsity
 
 
 def main(argv=None):
     base_config = get_config(argv)
     objective = partial(lambda trial: _main(trial, base_config))
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, 30)
+    study = optuna.create_study(
+        "sqlite:///db-pep.sqlite3",
+        study_name="pep",
+        directions=["maximize", "maximize"],
+    )
+    study.enqueue_trial(
+        {
+            "learning_rate": 1e-3,
+            "weight_decay": 1e-3,
+            "init_threshold": -7,
+            "num_layers": 3,
+            "info_nce_weight": 0.1,
+        }
+    )
+
+    study.optimize(objective, 100)
 
 
 if __name__ == "__main__":
