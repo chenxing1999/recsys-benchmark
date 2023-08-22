@@ -1,8 +1,11 @@
 """Script to train LightGCN with PEP config"""
 import argparse
+import copy
 import os
+from functools import partial
 from typing import Dict, Optional, Sequence, Union
 
+import optuna
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -24,6 +27,32 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
     return config
+
+
+def generate_config(trial, base_config, enable_sgl_wa=True):
+    """Generate a config yaml from trial"""
+
+    new_config = copy.deepcopy(base_config)
+
+    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2)
+    num_layers = trial.suggest_int("num_layers", 1, 4)
+    init_threshold = trial.suggest_float("init_threshold", -10, -5, step=0.1)
+
+    name = f"lr{lr:.4f}-decay{weight_decay:.4f}-num_layers{num_layers}"
+    if enable_sgl_wa:
+        info_nce = trial.suggest_float("info_nce_weight", 0, 1, step=0.05)
+        new_config["info_nce_weight"] = info_nce
+        name += f"-info_nce{info_nce:.4f}"
+
+    new_config["learning_rate"] = lr
+    new_config["weight_decay"] = weight_decay
+    new_config["model"]["num_layers"] = num_layers
+    new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
+
+    # new_config["logger"]["log_folder"] = LOG_FOLDER
+    new_config["logger"]["log_name"] = name
+    return new_config
 
 
 def _validate_config(config):
@@ -61,12 +90,13 @@ def init_profiler(config: Dict):
     return prof
 
 
-def main(argv: Optional[Sequence[str]] = None):
-    config = get_config(argv)
+def _main(trial, base_config):
+    config = generate_config(trial, base_config)
     logger = Logger(**config["logger"])
 
     # Not support other config besides pep config
     _validate_config(config)
+    config = generate_config(trial, config)
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -151,17 +181,17 @@ def main(argv: Optional[Sequence[str]] = None):
     num_epochs = config["num_epochs"]
 
     # Start hacking :)
-    # path = "checkpoints/pep/pep_ori/user.pth"
-    # state = torch.load(path)["state_dict"]
-    # model.user_emb_table.emb.weight.data = state["weight"]
-    # path = "checkpoints/pep_ori/user.pth"
-    # torch.save({"state_dict": state}, path)
+    path = "checkpoints/pep/pep_ori/user.pth"
+    state = torch.load(path)["state_dict"]
+    model.user_emb_table.emb.weight.data = state["weight"]
+    path = "checkpoints/pep_ori/user.pth"
+    torch.save({"state_dict": state}, path)
 
-    # path = "checkpoints/pep/pep_ori/item.pth"
-    # state = torch.load(path)["state_dict"]
-    # model.item_emb_table.emb.weight.data = state["weight"]
-    # path = "checkpoints/pep_ori/item.pth"
-    # torch.save({"state_dict": state}, path)
+    path = "checkpoints/pep/pep_ori/item.pth"
+    state = torch.load(path)["state_dict"]
+    model.item_emb_table.emb.weight.data = state["weight"]
+    path = "checkpoints/pep_ori/item.pth"
+    torch.save({"state_dict": state}, path)
     # end hacking
 
     if not is_pep_retrain:
@@ -214,6 +244,14 @@ def main(argv: Optional[Sequence[str]] = None):
 
             if not is_pep_retrain:
                 # get sparsity and store weight if possible
+                sparsity = model.user_emb_table._get_sparsity()
+
+                if epoch_idx == 1 and sparsity < 0.01:
+                    raise optuna.TrialPruned()
+                elif epoch_idx == 5:
+                    if sparsity < 0.4 or best_ndcg < 0.002:
+                        raise optuna.TrialPruned()
+
                 model.user_emb_table.train_callback(epoch_idx)
                 model.item_emb_table.train_callback(epoch_idx)
             else:
@@ -223,6 +261,33 @@ def main(argv: Optional[Sequence[str]] = None):
     if config["enable_profile"]:
         train_prof.stop()
         val_prof.stop()
+
+    # get best metric
+    sparsity = model.user_emb_table._get_sparsity()
+    # if sparsity < 0.7:
+    #     raise optuna.TrialPruned()
+    return checkpoint["val_metrics"]["ndcg"], sparsity
+
+
+def main(argv=None):
+    base_config = get_config(argv)
+    objective = partial(lambda trial: _main(trial, base_config))
+    study = optuna.create_study(
+        "sqlite:///db-pep.sqlite3",
+        study_name="pep",
+        directions=["maximize", "maximize"],
+    )
+    study.enqueue_trial(
+        {
+            "learning_rate": 1e-3,
+            "weight_decay": 1e-3,
+            "init_threshold": -7,
+            "num_layers": 3,
+            "info_nce_weight": 0.1,
+        }
+    )
+
+    study.optimize(objective, 100)
 
 
 if __name__ == "__main__":
