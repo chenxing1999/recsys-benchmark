@@ -44,11 +44,13 @@ class LightGCN(IGraphBaseCore):
             self.embedding_config,
             num_user,
             hidden_size,
+            field_name="user",
         )
         self.item_emb_table = get_embedding(
             self.embedding_config,
             num_item,
             hidden_size,
+            field_name="item",
         )
 
     def get_emb_table(self, matrix):

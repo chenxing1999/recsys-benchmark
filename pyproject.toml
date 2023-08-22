@@ -19,6 +19,7 @@ dependencies = [
     "loguru",
     "torch_tb_profiler",
     "tensorboard",
+    "optuna",
 ]
 dynamic = ["version"]
 

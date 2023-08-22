@@ -48,6 +48,7 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
 
         if not os.path.exists(cache_path):
             logger.info("Creating cache data...")
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
             cached_data = get_cache_data(path, min_threshold, False)
 
             if feat_mappers:
