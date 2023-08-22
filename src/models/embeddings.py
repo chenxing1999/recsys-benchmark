@@ -466,9 +466,8 @@ class RetrainPepEmbedding(IEmbedding):
         self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
         self.mask = self.mask.cuda()
 
-        self.sparsity = (
-            self.mask.sum() / torch.prod(torch.tensor(self.mask.size()))
-        ).item()
+        nnz = self.mask.sum()
+        self.sparsity = 1 - (nnz / torch.prod(torch.tensor(self.mask.size()))).item()
 
     def get_weight(self):
         sparse_emb = self.emb.weight * self.mask

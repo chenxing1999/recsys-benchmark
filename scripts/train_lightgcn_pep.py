@@ -16,10 +16,11 @@ from src import metrics
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
-from src.models.embeddings import PepEmbeeding, RetrainPepEmbeeding
+from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
 from src.trainer.lightgcn import train_epoch, validate_epoch
 
-IPepEmbedding = Union[PepEmbeeding, RetrainPepEmbeeding]
+IPepEmbedding = Union[PepEmbeeding, RetrainPepEmbedding]
+N_TRIALS = 30
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -50,7 +51,10 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     new_config["learning_rate"] = lr
     new_config["weight_decay"] = weight_decay
     new_config["model"]["num_layers"] = num_layers
-    new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
+
+    pep_config = base_config["pep_config"]
+    if not pep_config["is_retrain"]:
+        new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
 
     # new_config["logger"]["log_folder"] = LOG_FOLDER
     new_config["logger"]["log_name"] = name
@@ -178,14 +182,19 @@ def _main(trial: optuna.Trial, base_config: Dict):
         config["num_epochs"] = 1
 
     best_ndcg = 0
+    achieved_target = False
     num_epochs = config["num_epochs"]
 
     # Saving and revert
     pep_config = config["pep_config"]
     model_init_path = pep_config["model_init_path"]
+    target_sparsity = pep_config["target_sparsity"]
+    trial_checkpoint = pep_config["trial_checkpoint"]
+    os.makedirs(os.path.join(trial_checkpoint, "user"), exist_ok=True)
+    os.makedirs(os.path.join(trial_checkpoint, "item"), exist_ok=True)
     if os.path.exists(model_init_path):
         state = torch.load(model_init_path)
-        model.load_state_dict(state)
+        model.load_state_dict(state, strict=False)
     else:
         dirname = os.path.dirname(model_init_path)
         os.makedirs(dirname, exist_ok=True)
@@ -256,8 +265,15 @@ def _main(trial: optuna.Trial, base_config: Dict):
                         raise optuna.TrialPruned()
 
                 # Check if sparsity is low enough and save result mask
-                model.user_emb_table.train_callback()
                 model.item_emb_table.train_callback()
+                model.user_emb_table.train_callback()
+                if not achieved_target and sparsity > target_sparsity:
+                    logger.info("found sparsity target")
+                    achieved_target = True
+                    user_path = os.path.join(trial_checkpoint, "user/target.pth")
+                    torch.save(model.user_emb_table.state_dict(), user_path)
+                    item_path = os.path.join(trial_checkpoint, "item/target.pth")
+                    torch.save(model.item_emb_table.state_dict(), item_path)
 
     if config["enable_profile"]:
         train_prof.stop()
@@ -281,16 +297,17 @@ class Callback(object):
         self.target_sparsity = pep_config["target_sparsity"]
         self._cur_best_metric = 0
         self._best_checkpoint_path = pep_config["best_checkpoint_dir"]
-
-        emb_config = config["model"]["embedding_config"]
-        self._save_checkpoint_path = emb_config["checkpoint_weight_dir"]
+        self._save_checkpoint_path = pep_config["trial_checkpoint"]
 
     def __call__(self, study, frozen_trial):
+        if frozen_trial.state == optuna.trial.TrialState.PRUNED:
+            return
         ndcg, sparsity = frozen_trial.values
         if sparsity >= self.target_sparsity and ndcg > self._cur_best_metric:
             self._cur_best_metric = ndcg
-            shutil.rmtree(self._save_checkpoint_path)
-            shutil.copy2(
+            if os.path.exists(self._best_checkpoint_path):
+                shutil.rmtree(self._best_checkpoint_path)
+            shutil.copytree(
                 self._save_checkpoint_path,
                 self._best_checkpoint_path,
             )
@@ -304,13 +321,14 @@ def main(argv=None):
         "sqlite:///db-pep.sqlite3",
         study_name="pep",
         directions=["maximize", "maximize"],
+        load_if_exists=True,
     )
 
     _validate_config(base_config)
     is_retrain = base_config["pep_config"]["is_retrain"]
 
     logger = loguru.logger
-    if is_retrain:
+    if not is_retrain:
         study.enqueue_trial(
             {
                 "learning_rate": 1e-3,
@@ -321,7 +339,7 @@ def main(argv=None):
             }
         )
 
-        study.optimize(objective, 100, callbacks=[callback])
+        study.optimize(objective, N_TRIALS, callbacks=[callback])
 
         logger.info("Finished searching for best Pep config")
     else:
@@ -329,7 +347,7 @@ def main(argv=None):
 
         logger.info("Start retraining best PEP config")
         # Retrain best model logic
-        target_sparsity = pep_config["target_sparisty"]
+        target_sparsity = pep_config["target_sparsity"]
 
         # Find result with highest ndcg that are s.t. sparsity >= target_sparsity
         best_trial = None
@@ -337,7 +355,7 @@ def main(argv=None):
         for trial in study.get_trials():
             score, sparsity = trial.values
             if sparsity >= target_sparsity and score > best_metric:
-                best_trial = best_trial
+                best_trial = trial
                 best_metric = score
 
         logger.info(f"Best trial={best_trial}")
@@ -347,7 +365,7 @@ def main(argv=None):
         embedding_config = {}
         embedding_config["name"] = "pep_retrain"
         embedding_config["checkpoint_weight_dir"] = pep_config["best_checkpoint_dir"]
-        embedding_config["sparsity"] = target_sparsity
+        embedding_config["sparsity"] = "target"
 
         base_config["model"]["embedding_config"] = embedding_config
 

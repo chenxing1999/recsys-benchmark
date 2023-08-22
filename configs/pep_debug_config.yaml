@@ -10,9 +10,11 @@ model:
     init_threshold: -6.5
 
 pep_config:
-  target_sparsity: 0.8
-  best_checkpoint_dir: checkpoints/best/
-  is_retrain: False
+  target_sparsity: 0.7
+  best_checkpoint_dir: checkpoints/best_pep
+  model_init_path: checkpoints/model_pep_init.pth
+  is_retrain: True
+  trial_checkpoint: checkpoints/pep_trial
 
 train_dataloader:
   dataset:
@@ -37,7 +39,7 @@ test_dataloader:
 run_test: false
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 1000
+num_epochs: 20
 log_step: 100
 
 weight_decay: 0.001
