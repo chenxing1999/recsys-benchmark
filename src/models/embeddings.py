@@ -285,7 +285,7 @@ def get_embedding(
         "qr": QRHashingEmbedding,
         "dhe": DHEEmbedding,
         "pep": PepEmbeeding,
-        "pep_retrain": RetrainPepEmbeeding,
+        "pep_retrain": RetrainPepEmbedding,
     }
     if name == "vanilla":
         emb = VanillaEmbedding(
@@ -358,10 +358,6 @@ class PepEmbeeding(IEmbedding):
         os.makedirs(checkpoint_weight_dir, exist_ok=True)
         self.checkpoint_weight_dir = checkpoint_weight_dir
 
-        from src.loggers import Logger
-
-        self._logger = Logger.get_logger()
-
     def get_weight(self):
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
         return sparse_weight
@@ -400,18 +396,17 @@ class PepEmbeeding(IEmbedding):
             raise ValueError("Invalid threshold_type: {}".format(self.threshold_type))
         return s
 
-    def _get_sparsity(self):
+    def get_sparsity(self) -> float:
         total_params = self.emb.weight.numel()
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
         n_params = (sparse_weight != 0).sum()
         return (1 - n_params / total_params).item()
 
-    def train_callback(self, epoch_idx):
+    def train_callback(self):
         """Callback to save weight to `checkpoint_weight_dir`"""
         with torch.no_grad():
-            cur_sparsity = self._get_sparsity()
+            cur_sparsity = self.get_sparsity()
 
-        self._logger.log_metric(f"{self.field_name}/sparsity", cur_sparsity, epoch_idx)
         while (
             self._cur_min_spar_idx < len(self.sparsity)
             and self.sparsity[self._cur_min_spar_idx] < cur_sparsity
@@ -425,18 +420,31 @@ class PepEmbeeding(IEmbedding):
             self._cur_min_spar_idx += 1
 
 
-class RetrainPepEmbeeding(IEmbedding):
-    """ """
+class RetrainPepEmbedding(IEmbedding):
+    """Wrapper for Retrain inference logic of Pep Embedding"""
 
     def __init__(
         self,
-        num_item,
+        num_item: int,
         hidden_size,
         checkpoint_weight_dir,
-        sparsity: float,
+        sparsity: Union[float, str],
         ori_weight_dir: Optional[str] = None,
         field_name: str = "",
     ):
+        """
+        Args:
+            num_item
+            hidden_size
+            checkpoint_weight_dir: Path pep_checkpoint folder
+                The weight to get weight mask from should be
+                    f"{checkpoint_weight_dir}/{field_name}/{sparsity}.pth
+
+            sparsity: Target sparsity
+            ori_weight_dir: Path to original weight
+                if not provided, you could try to manually load the original weight
+            field_name: Name to field (used to get checkpoint mask path)
+        """
         super().__init__()
         self.emb = nn.Embedding(num_item, hidden_size)
 
@@ -458,7 +466,9 @@ class RetrainPepEmbeeding(IEmbedding):
         self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
         self.mask = self.mask.cuda()
 
-        print(self.mask.sum() / torch.prod(torch.tensor(self.mask.size())))
+        self.sparsity = (
+            self.mask.sum() / torch.prod(torch.tensor(self.mask.size()))
+        ).item()
 
     def get_weight(self):
         sparse_emb = self.emb.weight * self.mask
@@ -467,3 +477,6 @@ class RetrainPepEmbeeding(IEmbedding):
     def forward(self, x):
         sparse_emb = self.emb.weight * self.mask
         return F.embedding(x, sparse_emb)
+
+    def get_sparsity(self):
+        return self.sparsity

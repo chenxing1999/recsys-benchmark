@@ -9,7 +9,10 @@ model:
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
     init_threshold: -6.5
 
-pep_config: null
+pep_config:
+  target_sparsity: 0.8
+  best_checkpoint_dir: checkpoints/best/
+  is_retrain: False
 
 train_dataloader:
   dataset:
