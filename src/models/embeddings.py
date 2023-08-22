@@ -293,6 +293,10 @@ def get_embedding(
             hidden_size,
             **embedding_config,
         )
+    elif name == "optembed":
+        from src.models.opt_embed import OptEmbed
+
+        emb = OptEmbed(num_item, hidden_size)
     elif name not in name_to_cls:
         raise NotImplementedError()
     else:
