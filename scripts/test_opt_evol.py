@@ -59,11 +59,6 @@ def main(argv: Optional[Sequence[str]] = None):
         model_config,
     )
 
-    if torch.cuda.is_available():
-        pass
-    else:
-        pass
-
     if config["run_test"]:
         raise NotImplementedError("Will implement later")
 
@@ -78,13 +73,13 @@ def main(argv: Optional[Sequence[str]] = None):
     model.load_state_dict(checkpoint["state_dict"])
 
     # TODO: Refactor later
-    num_generations = 5
-    population = 6
-    n_crossover = 4
-    n_mutate = 4
-    p_mutate = 0.2
-    k = 5
-    result = evol_search_lightgcn(
+    num_generations = 30
+    population = 20
+    n_crossover = 10
+    n_mutate = 10
+    p_mutate = 0.1
+    k = 15
+    best_item_mask, best_user_mask, best_ndcg = evol_search_lightgcn(
         model,
         num_generations,
         population,
@@ -94,8 +89,13 @@ def main(argv: Optional[Sequence[str]] = None):
         k,
         val_dataloader,
         train_dataset,
+        target_sparsity=0.8,
     )
-    return result
+    nnz = best_item_mask.sum() + best_user_mask.sum()
+    total_element = len(best_item_mask) + len(best_user_mask)
+    total_element *= model.item_emb_table._hidden_size
+
+    print("Sparsity", 1 - nnz / total_element)
 
 
 if __name__ == "__main__":

@@ -68,23 +68,30 @@ Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask
 
 
 def _generate_lightgcn_candidate(num_user, num_item, hidden_size, target_sparsity=None):
-    candidate = LightGCNCandidate(
-        user_mask=torch.randint(0, hidden_size, (num_user,)),
-        item_mask=torch.randint(0, hidden_size, (num_item,)),
-    )
-
     if target_sparsity is None:
+        candidate = LightGCNCandidate(
+            user_mask=torch.randint(0, hidden_size, (num_user,)),
+            item_mask=torch.randint(0, hidden_size, (num_item,)),
+        )
         return candidate
 
-    n_elements = candidate.user_mask.sum() + candidate.item_mask.sum()
-    n_max_elements = (num_item + num_user) * hidden_size
+    avg_hidden_size = min(int((1 - target_sparsity) * hidden_size * 2), hidden_size)
 
-    cur_sparsity = n_elements / n_max_elements
+    candidate = LightGCNCandidate(
+        user_mask=torch.randint(0, avg_hidden_size, (num_user,)),
+        item_mask=torch.randint(0, avg_hidden_size, (num_item,)),
+    )
 
-    while cur_sparsity > target_sparsity:
-        candidate = _generate_lightgcn_candidate(num_user, num_item, hidden_size)
-        n_elements = candidate.user_mask.sum() + candidate.item_mask.sum()
-        cur_sparsity = n_elements / n_max_elements
+    cur_sparsity = _get_sparsity(candidate, hidden_size)
+
+    while cur_sparsity < target_sparsity:
+        avg_hidden_size = avg_hidden_size - 1
+        candidate = LightGCNCandidate(
+            user_mask=torch.randint(0, avg_hidden_size, (num_user,)),
+            item_mask=torch.randint(0, avg_hidden_size, (num_item,)),
+        )
+        cur_sparsity = _get_sparsity(candidate, hidden_size)
+        logger.debug(f"gen {cur_sparsity}")
     return candidate
 
 
@@ -126,7 +133,6 @@ def _crossover(
     target_sparsity: Optional[float] = None,
 ) -> List[Candidate]:
     result = []
-    n_max_elements = (num_item + num_user) * hidden_size
     for _ in range(n_crossover):
         while True:
             father, mother = random.choices(cur_top_candidate, k=2)
@@ -154,11 +160,12 @@ def _crossover(
             if target_sparsity is None:
                 break
 
-            n_elements = candidate.user_mask.sum() + candidate.item_mask.sum()
-            cur_sparsity = n_elements / n_max_elements
+            cur_sparsity = _get_sparsity(candidate, hidden_size)
             if cur_sparsity > target_sparsity:
                 break
+            logger.debug(f"crossover... {cur_sparsity}")
 
+        logger.debug("crossovered", cur_sparsity)
         result.append(candidate)
 
     return result
@@ -174,7 +181,8 @@ def _mutate(
     target_sparsity: Optional[float] = None,
 ) -> List[Candidate]:
     result = []
-    n_max_elements = (num_item + num_user) * hidden_size
+
+    max_hidden_size_budget = hidden_size
     for _ in range(n_mutate):
         while True:
             parent = random.choice(cur_top_candidate)
@@ -182,26 +190,45 @@ def _mutate(
             son_item = parent.item_mask.clone()
             mask = torch.rand(son_item.shape[0]) < p_mutate
             num_mutated = mask.sum()
-            son_item[mask] = torch.randint(0, hidden_size, size=(num_mutated,))
+            son_item[mask] = torch.randint(
+                0, max_hidden_size_budget, size=(num_mutated,)
+            )
 
             son_user = parent.user_mask.clone()
             mask = torch.rand(son_user.shape[0]) < p_mutate
             num_mutated = mask.sum()
-            son_user[mask] = torch.randint(0, hidden_size, size=(num_mutated,))
+            son_user[mask] = torch.randint(
+                0, max_hidden_size_budget, size=(num_mutated,)
+            )
 
             candidate = Candidate(item_mask=son_item, user_mask=son_user)
 
             if target_sparsity is None:
                 break
 
-            n_elements = candidate.user_mask.sum() + candidate.item_mask.sum()
-            cur_sparsity = n_elements / n_max_elements
+            cur_sparsity = _get_sparsity(candidate, hidden_size)
+            logger.debug(f"mutating... {cur_sparsity}")
             if cur_sparsity > target_sparsity:
                 break
 
+            max_hidden_size_budget -= 1
+
+        logger.debug("mutated", cur_sparsity)
         result.append(candidate)
 
     return result
+
+
+def _get_sparsity(candidate: Candidate, hidden_size):
+    # mask count from 0
+    n_elements = (candidate.user_mask + 1).sum() + (candidate.item_mask + 1).sum()
+
+    num_item = len(candidate.item_mask)
+    num_user = len(candidate.user_mask)
+    n_max_elements = (num_item + num_user) * hidden_size
+
+    cur_sparsity = 1 - n_elements / n_max_elements
+    return cur_sparsity
 
 
 def evol_search_lightgcn(
@@ -271,7 +298,7 @@ def evol_search_lightgcn(
             cur_top_values = metrics
         cur_top_candidate.extend(candidates)
 
-        result = torch.topk(metrics, k)
+        result = torch.topk(cur_top_values, k)
 
         cur_top_candidate = [cur_top_candidate[idx] for idx in result.indices]
         cur_top_values = result.values
