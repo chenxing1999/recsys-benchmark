@@ -79,14 +79,13 @@ def _generate_lightgcn_candidate(num_user, num_item, hidden_size, target_sparsit
     while cur_sparsity < target_sparsity:
         candidate = LightGCNCandidate(
             user_mask=_sampling_by_weight(
-                target_sparsity * 1.01, hidden_size, num_user
+                target_sparsity * 1.05, hidden_size, num_user
             ),
             item_mask=_sampling_by_weight(
-                target_sparsity * 1.01, hidden_size, num_item
+                target_sparsity * 1.05, hidden_size, num_item
             ),
         )
-        # Decrease alpha
-        logger.debug(f"gen {cur_sparsity}")
+        cur_sparsity = _get_sparsity(candidate, hidden_size)
     return candidate
 
 
@@ -158,9 +157,7 @@ def _crossover(
             cur_sparsity = _get_sparsity(candidate, hidden_size)
             if cur_sparsity > target_sparsity:
                 break
-            logger.debug(f"crossover... {cur_sparsity}")
 
-        logger.debug("crossovered", cur_sparsity)
         result.append(candidate)
 
     return result
@@ -184,13 +181,13 @@ def _mutate(
 
             son_item = parent.item_mask.clone()
             mask = torch.rand(son_item.shape[0]) < p_mutate
-            num_mutated = mask.sum()
+            num_mutated = mask.sum().item()
             son_item[mask] = _sampling_by_weight(
                 target_sparsity, hidden_size, num_mutated
             )
             son_user = parent.user_mask.clone()
             mask = torch.rand(son_user.shape[0]) < p_mutate
-            num_mutated = mask.sum()
+            num_mutated = mask.sum().item()
             son_user[mask] = _sampling_by_weight(
                 target_sparsity, hidden_size, num_mutated
             )
@@ -201,13 +198,11 @@ def _mutate(
                 break
 
             cur_sparsity = _get_sparsity(candidate, hidden_size)
-            logger.debug(f"mutating... {cur_sparsity}")
             if cur_sparsity > target_sparsity:
                 break
 
             max_hidden_size_budget -= 1
 
-        logger.debug("mutated", cur_sparsity)
         result.append(candidate)
 
     return result
@@ -297,7 +292,12 @@ def evol_search_lightgcn(
         cur_top_candidate = [cur_top_candidate[idx] for idx in result.indices]
         cur_top_values = result.values
 
-        logger.debug(f"cur best {cur_top_candidate[0]} - {cur_top_values[0]}")
+        cur_best_sparsity = _get_sparsity(cur_top_candidate[0], hidden_size)
+        logger.debug(
+            f"cur best {cur_top_candidate[0]}"
+            f"- ndcg: {cur_top_values[0]:.4f}"
+            f"- sparsity: {cur_best_sparsity:.4f}"
+        )
 
         if gen != n_generations - 1:
             logger.debug(f"mutate and crossover {gen=}")
@@ -331,26 +331,27 @@ def evol_search_lightgcn(
 
 
 @lru_cache(1)
-def _find_alpha(target_sparsity, step=0.99):
-    if target_sparsity == 0.7:
-        return 0.989
-    elif target_sparsity == 0.8:
-        return 0.9801
+def _find_alpha(target_sparsity, hidden_size, step=1.01):
+    if target_sparsity == 0.7 and hidden_size == 64:
+        return 1.045
+    elif target_sparsity == 0.8 and hidden_size == 64:
+        return 1.083
     elif target_sparsity == 0.5:
         return 1
 
     alpha = 1
-    # large number for sampling logic
-    h = 256
+    h = hidden_size
     while True:
         f = np.power(alpha, np.arange(1, h + 1) * (-1) + h)
+
         p = f / f.sum()
 
         # print(p)
         E = (np.arange(1, h + 1) * p / h).sum()
-        if E > target_sparsity:
+        sparsity = 1 - E
+        if sparsity > target_sparsity:
             return alpha
-        alpha = alpha * 0.99
+        alpha = alpha * step
 
 
 def _generate_weight(alpha, hidden_size):
@@ -363,7 +364,7 @@ def _sampling_by_weight(target_sparsity, hidden_size, num_item):
     if target_sparsity is None:
         return torch.randint(0, hidden_size, (num_item,))
 
-    alpha = _find_alpha(target_sparsity)
+    alpha = _find_alpha(target_sparsity, hidden_size)
     weight = _generate_weight(alpha, hidden_size)
     sampler = torch.utils.data.WeightedRandomSampler(weight, num_item)
     return torch.tensor(list(sampler))

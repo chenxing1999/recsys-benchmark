@@ -1,3 +1,4 @@
+"""Script to run OptEmbed Evolutionary search for LightGCN-based model"""
 import argparse
 import os
 from typing import Dict, Optional, Sequence
@@ -89,7 +90,7 @@ def main(argv: Optional[Sequence[str]] = None):
         k,
         val_dataloader,
         train_dataset,
-        target_sparsity=0.8,
+        target_sparsity=0.7,
     )
     nnz = best_item_mask.sum() + best_user_mask.sum()
     total_element = len(best_item_mask) + len(best_user_mask)
