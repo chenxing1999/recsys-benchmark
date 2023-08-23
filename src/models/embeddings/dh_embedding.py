@@ -8,7 +8,7 @@ from torch import nn
 from .base import IEmbedding
 
 
-class DHEEmbedding(IEmbedding):
+class DHEmbedding(IEmbedding):
     """DHE Hashing method proposed in
     https://arxiv.org/pdf/2010.10784.pdf"""
 

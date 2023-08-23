@@ -4,7 +4,7 @@ from typing import Dict
 from src.models.opt_embed import OptEmbed
 
 from .base import IEmbedding, VanillaEmbedding
-from .dh_embedding import DHEEmbedding
+from .dh_embedding import DHEmbedding
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 
@@ -22,7 +22,7 @@ def get_embedding(
     name_to_cls = {
         "vanilla": VanillaEmbedding,
         "qr": QRHashingEmbedding,
-        "dhe": DHEEmbedding,
+        "dhe": DHEmbedding,
         "pep": PepEmbeeding,
         "pep_retrain": RetrainPepEmbedding,
     }
