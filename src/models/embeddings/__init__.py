@@ -1,10 +1,9 @@
 import copy
 from typing import Dict
 
-from src.models.opt_embed import OptEmbed
-
 from .base import IEmbedding, VanillaEmbedding
 from .dh_embedding import DHEmbedding
+from .lightgcn_opt_embed import OptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 
