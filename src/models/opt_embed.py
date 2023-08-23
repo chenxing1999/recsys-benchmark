@@ -1,8 +1,9 @@
 import random
 from collections import namedtuple
-from functools import partial
+from functools import lru_cache, partial
 from typing import List, Optional, Tuple
 
+import numpy as np
 import torch
 from loguru import logger
 from torch import nn
@@ -68,29 +69,23 @@ Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask
 
 
 def _generate_lightgcn_candidate(num_user, num_item, hidden_size, target_sparsity=None):
-    if target_sparsity is None:
-        candidate = LightGCNCandidate(
-            user_mask=torch.randint(0, hidden_size, (num_user,)),
-            item_mask=torch.randint(0, hidden_size, (num_item,)),
-        )
-        return candidate
-
-    avg_hidden_size = min(int((1 - target_sparsity) * hidden_size * 2), hidden_size)
-
     candidate = LightGCNCandidate(
-        user_mask=torch.randint(0, avg_hidden_size, (num_user,)),
-        item_mask=torch.randint(0, avg_hidden_size, (num_item,)),
+        user_mask=_sampling_by_weight(target_sparsity, hidden_size, num_user),
+        item_mask=_sampling_by_weight(target_sparsity, hidden_size, num_item),
     )
 
     cur_sparsity = _get_sparsity(candidate, hidden_size)
 
     while cur_sparsity < target_sparsity:
-        avg_hidden_size = avg_hidden_size - 1
         candidate = LightGCNCandidate(
-            user_mask=torch.randint(0, avg_hidden_size, (num_user,)),
-            item_mask=torch.randint(0, avg_hidden_size, (num_item,)),
+            user_mask=_sampling_by_weight(
+                target_sparsity * 1.01, hidden_size, num_user
+            ),
+            item_mask=_sampling_by_weight(
+                target_sparsity * 1.01, hidden_size, num_item
+            ),
         )
-        cur_sparsity = _get_sparsity(candidate, hidden_size)
+        # Decrease alpha
         logger.debug(f"gen {cur_sparsity}")
     return candidate
 
@@ -190,15 +185,14 @@ def _mutate(
             son_item = parent.item_mask.clone()
             mask = torch.rand(son_item.shape[0]) < p_mutate
             num_mutated = mask.sum()
-            son_item[mask] = torch.randint(
-                0, max_hidden_size_budget, size=(num_mutated,)
+            son_item[mask] = _sampling_by_weight(
+                target_sparsity, hidden_size, num_mutated
             )
-
             son_user = parent.user_mask.clone()
             mask = torch.rand(son_user.shape[0]) < p_mutate
             num_mutated = mask.sum()
-            son_user[mask] = torch.randint(
-                0, max_hidden_size_budget, size=(num_mutated,)
+            son_user[mask] = _sampling_by_weight(
+                target_sparsity, hidden_size, num_mutated
             )
 
             candidate = Candidate(item_mask=son_item, user_mask=son_user)
@@ -334,6 +328,45 @@ def evol_search_lightgcn(
     user_mask = top_candidate.user_mask
 
     return item_mask, user_mask, cur_top_values[0]
+
+
+@lru_cache(1)
+def _find_alpha(target_sparsity, step=0.99):
+    if target_sparsity == 0.7:
+        return 0.989
+    elif target_sparsity == 0.8:
+        return 0.9801
+    elif target_sparsity == 0.5:
+        return 1
+
+    alpha = 1
+    # large number for sampling logic
+    h = 256
+    while True:
+        f = np.power(alpha, np.arange(1, h + 1) * (-1) + h)
+        p = f / f.sum()
+
+        # print(p)
+        E = (np.arange(1, h + 1) * p / h).sum()
+        if E > target_sparsity:
+            return alpha
+        alpha = alpha * 0.99
+
+
+def _generate_weight(alpha, hidden_size):
+    f = np.power(alpha, np.arange(1, hidden_size + 1) * (-1) + hidden_size)
+    p = f / f.sum()
+    return p
+
+
+def _sampling_by_weight(target_sparsity, hidden_size, num_item):
+    if target_sparsity is None:
+        return torch.randint(0, hidden_size, (num_item,))
+
+    alpha = _find_alpha(target_sparsity)
+    weight = _generate_weight(alpha, hidden_size)
+    sampler = torch.utils.data.WeightedRandomSampler(weight, num_item)
+    return torch.tensor(list(sampler))
 
 
 # Retrain
