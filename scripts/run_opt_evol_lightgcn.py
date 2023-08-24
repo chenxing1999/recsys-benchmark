@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import get_graph_model
-from src.models.opt_embed import evol_search_lightgcn
+from src.models.embeddings.lightgcn_opt_embed import evol_search_lightgcn
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -91,6 +91,7 @@ def main(argv: Optional[Sequence[str]] = None):
         val_dataloader,
         train_dataset,
         target_sparsity=0.7,
+        naive=False,
     )
     nnz = best_item_mask.sum() + best_user_mask.sum()
     total_element = len(best_item_mask) + len(best_user_mask)

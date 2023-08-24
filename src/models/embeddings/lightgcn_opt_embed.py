@@ -9,6 +9,8 @@ from loguru import logger
 from torch import nn
 from torch.nn import functional as F
 
+from .base import IEmbedding
+
 
 def get_mask(hidden_size: int):
     # matrix size  = hidden_size * hidden_size
@@ -42,8 +44,17 @@ class BinaryStep(torch.autograd.Function):
         additional[middle_index] = 0.4
         return grad_input * additional
 
+class IOptEmbed(IEmbedding):
+    def get_weight(self, mask_d: Optional[torch.Tensor] = None):
+        ...
 
-class OptEmbed(nn.Module):
+    def forward(self, x, mask_d=None):
+        ...
+
+    def get_l_s(self):
+        return 0
+
+class OptEmbed(IOptEmbed):
     def __init__(
         self,
         field_dims: Union[List[int], int],
@@ -56,7 +67,7 @@ class OptEmbed(nn.Module):
         if isinstance(field_dims, int):
             field_dims = [field_dims]
 
-        self._field_dims = torch.tensor(field_dims)
+        self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
         self._num_item = self._field_dims.sum()
         self._num_field = len(field_dims)
 
@@ -82,10 +93,14 @@ class OptEmbed(nn.Module):
         self._cur_weight = None
         self._norm = norm
 
+    def get_l_s(self):
+        return torch.exp(- self._t_param)
+
     def _transform_t_to_feat(self):
         if self.mode_threshold_e == "feature":
             return self._t_param
 
+        self._field_dims = self._field_dims.to(self._t_param.device)
         return torch.repeat_interleave(
             self._t_param,
             self._field_dims,
@@ -95,11 +110,12 @@ class OptEmbed(nn.Module):
 
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):
         device = self._weight.data.device
-        self._full_mask = self._full_mask.to(device)
+        self._full_mask_d = self._full_mask_d.to(device)
 
         # Apply mask_e
         t = self._transform_t_to_feat()
         mask_e = self.s(torch.norm(self._weight, self._norm) - t)
+        mask_e = mask_e.unsqueeze(-1)
         emb = self._weight * mask_e
 
         if self.training:
@@ -107,7 +123,7 @@ class OptEmbed(nn.Module):
                 indices = torch.randint(
                     0, self._hidden_size, (self._num_item,), device=device
                 )
-                mask_d = F.embedding(indices, self._full_mask)
+                mask_d = F.embedding(indices, self._full_mask_d)
 
             self._cur_weight = emb * mask_d
         else:
@@ -116,7 +132,7 @@ class OptEmbed(nn.Module):
             else:
                 if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
                     mask_d = mask_d.to(device)
-                    mask_d = F.embedding(mask_d, self._full_mask)
+                    mask_d = F.embedding(mask_d, self._full_mask_d)
                 mask_d = mask_d.to(self._weight)
                 self._cur_weight = emb * mask_d
 
@@ -129,7 +145,7 @@ class OptEmbed(nn.Module):
         return F.embedding(x, self._cur_weight)
 
 
-class OptEmbedMaskD(nn.Module):
+class OptEmbedMaskD(IOptEmbed):
     """Wrapper to calculate E * mask_d in OptEmbed"""
 
     def __init__(self, num_item, hidden_size):
@@ -149,9 +165,7 @@ class OptEmbedMaskD(nn.Module):
 
         if self.training:
             if mask_d is None:
-                indices = torch.randint(
-                    0, self._hidden_size, (self._num_item,), device=device
-                )
+                indices = torch.randint(0, self._hidden_size, (self._num_item,), device=device)
                 mask_d = F.embedding(indices, self._full_mask)
 
             self._cur_weight = self._weight * mask_d
@@ -167,6 +181,9 @@ class OptEmbedMaskD(nn.Module):
 
         return self._cur_weight
 
+    def get_l_s(self):
+        return 0
+
     def forward(self, x, mask_d=None):
         if self._cur_weight is None:
             self.get_weight(mask_d)
@@ -178,21 +195,31 @@ class OptEmbedMaskD(nn.Module):
 Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask"])
 
 
-def _generate_lightgcn_candidate(num_user, num_item, hidden_size, target_sparsity=None):
+def _generate_lightgcn_candidate(num_user, num_item, hidden_size, target_sparsity=None, naive=False):
     candidate = LightGCNCandidate(
-        user_mask=_sampling_by_weight(target_sparsity, hidden_size, num_user),
-        item_mask=_sampling_by_weight(target_sparsity, hidden_size, num_item),
+        user_mask=_sampling_by_weight(
+            target_sparsity,
+            hidden_size,
+            num_user,
+            naive,
+        ),
+        item_mask=_sampling_by_weight(
+            target_sparsity,
+            hidden_size,
+            num_item,
+            naive,
+        ),
     )
 
     cur_sparsity = _get_sparsity(candidate, hidden_size)
-
+    step = 1.05
     while cur_sparsity < target_sparsity:
         candidate = LightGCNCandidate(
             user_mask=_sampling_by_weight(
-                target_sparsity * 1.05, hidden_size, num_user
+                target_sparsity * step, hidden_size, num_user
             ),
             item_mask=_sampling_by_weight(
-                target_sparsity * 1.05, hidden_size, num_item
+                target_sparsity * step, hidden_size, num_item
             ),
         )
         cur_sparsity = _get_sparsity(candidate, hidden_size)
@@ -281,6 +308,7 @@ def _mutate(
     num_item: int,
     hidden_size: int,
     target_sparsity: Optional[float] = None,
+    naive=False,
 ) -> List[Candidate]:
     result = []
 
@@ -293,13 +321,13 @@ def _mutate(
             mask = torch.rand(son_item.shape[0]) < p_mutate
             num_mutated = mask.sum().item()
             son_item[mask] = _sampling_by_weight(
-                target_sparsity, hidden_size, num_mutated
+                target_sparsity, hidden_size, num_mutated, naive,
             )
             son_user = parent.user_mask.clone()
             mask = torch.rand(son_user.shape[0]) < p_mutate
             num_mutated = mask.sum().item()
             son_user[mask] = _sampling_by_weight(
-                target_sparsity, hidden_size, num_mutated
+                target_sparsity, hidden_size, num_mutated, naive,
             )
 
             candidate = Candidate(item_mask=son_item, user_mask=son_user)
@@ -341,6 +369,7 @@ def evol_search_lightgcn(
     val_dataloader,
     train_dataset,
     target_sparsity=None,
+    naive=False,
 ) -> Tuple[torch.LongTensor, torch.LongTensor, float]:
     """Evolutionary search for LightGCN with OptEmbed
 
@@ -359,6 +388,8 @@ def evol_search_lightgcn(
             as num_item, num_users, ...
 
         target_sparsity: Maximum sparsity accepted
+        naive: Generate with target sparsity with linearly 
+            reduce max hidden size
 
     Returns:
         best_item_mask: (torch.LongTensor, shape (num_items,))
@@ -374,8 +405,8 @@ def evol_search_lightgcn(
     num_items = train_dataset.num_items
     num_users = train_dataset.num_users
 
-    assert isinstance(model.item_emb_table, OptEmbed)
-    assert isinstance(model.user_emb_table, OptEmbed)
+    assert isinstance(model.item_emb_table, IOptEmbed)
+    assert isinstance(model.user_emb_table, IOptEmbed)
     hidden_size = model.item_emb_table._hidden_size
 
     candidates = [
@@ -470,9 +501,19 @@ def _generate_weight(alpha, hidden_size):
     return p
 
 
-def _sampling_by_weight(target_sparsity, hidden_size, num_item):
+def _get_linear_hidden(target_sparsity, hidden_size):
+    assert target_sparsity >= 0.5, "Generate naive only could generate sparsity from 0.5"
+    hidden_size = int(hidden_size * 2 * (1 - target_sparsity))
+    return hidden_size
+
+
+def _sampling_by_weight(target_sparsity, hidden_size, num_item, navie=True):
     if target_sparsity is None:
         return torch.randint(0, hidden_size, (num_item,))
+
+    if navie:
+        hidden = _get_linear_hidden(target_sparsity, hidden_size)
+        return torch.randint(0, hidden, (num_item,))
 
     alpha = _find_alpha(target_sparsity, hidden_size)
     weight = _generate_weight(alpha, hidden_size)

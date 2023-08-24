@@ -34,7 +34,7 @@ def get_embedding(
             **embedding_config,
         )
     elif name not in name_to_cls:
-        raise NotImplementedError()
+        raise NotImplementedError(f"{name} not found in mapping from name to class")
     else:
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
