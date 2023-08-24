@@ -77,8 +77,8 @@ def generate_config(trial):
 
     new_config = copy.deepcopy(base_config)
 
-    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2)
-    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2)
+    lr = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=True)
     num_layers = trial.suggest_int("num_layers", 1, 4)
 
     name = f"lr{lr:.4f}-decay{weight_decay:.4f}-num_layers{num_layers}"
