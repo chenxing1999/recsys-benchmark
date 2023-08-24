@@ -1,7 +1,7 @@
 import random
 from collections import namedtuple
 from functools import lru_cache, partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -21,7 +21,117 @@ def get_mask(hidden_size: int):
     return matrix
 
 
+class BinaryStep(torch.autograd.Function):
+    """Copied from original OptEmbed repo
+    (https://github.com/fuyuanlyu/OptEmbed)
+    """
+
+    @staticmethod
+    def forward(ctx, inp):
+        ctx.save_for_backward(inp)
+        return (inp > 0.0).float()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        (inp,) = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        zero_index = torch.abs(inp) > 1
+        middle_index = (torch.abs(inp) <= 1) * (torch.abs(inp) > 0.4)
+        additional = 2 - 4 * torch.abs(inp)
+        additional[zero_index] = 0.0
+        additional[middle_index] = 0.4
+        return grad_input * additional
+
+
 class OptEmbed(nn.Module):
+    def __init__(
+        self,
+        field_dims: Union[List[int], int],
+        hidden_size: int,
+        t_init: float = 0,
+        mode_threshold_e="field",
+        norm=1,
+    ):
+        super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        self._field_dims = torch.tensor(field_dims)
+        self._num_item = self._field_dims.sum()
+        self._num_field = len(field_dims)
+
+        self._hidden_size = hidden_size
+        self.s = BinaryStep.apply
+
+        self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
+        nn.init.xavier_uniform_(self._weight)
+
+        self._full_mask_d = get_mask(hidden_size)
+
+        assert mode_threshold_e in ["feature", "field"]
+        self.mode_threshold_e = mode_threshold_e
+
+        if self.mode_threshold_e == "feature":
+            t_size = self._num_item
+        else:
+            t_size = self._num_field
+
+        self._t_param = nn.Parameter(torch.empty(t_size))
+        nn.init.constant_(self._t_param, t_init)
+
+        self._cur_weight = None
+        self._norm = norm
+
+    def _transform_t_to_feat(self):
+        if self.mode_threshold_e == "feature":
+            return self._t_param
+
+        return torch.repeat_interleave(
+            self._t_param,
+            self._field_dims,
+            dim=0,
+            output_size=self._num_item,
+        )
+
+    def get_weight(self, mask_d: Optional[torch.Tensor] = None):
+        device = self._weight.data.device
+        self._full_mask = self._full_mask.to(device)
+
+        # Apply mask_e
+        t = self._transform_t_to_feat()
+        mask_e = self.s(torch.norm(self._weight, self._norm) - t)
+        emb = self._weight * mask_e
+
+        if self.training:
+            if mask_d is None:
+                indices = torch.randint(
+                    0, self._hidden_size, (self._num_item,), device=device
+                )
+                mask_d = F.embedding(indices, self._full_mask)
+
+            self._cur_weight = emb * mask_d
+        else:
+            if mask_d is None:
+                self._cur_weight = emb
+            else:
+                if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
+                    mask_d = mask_d.to(device)
+                    mask_d = F.embedding(mask_d, self._full_mask)
+                mask_d = mask_d.to(self._weight)
+                self._cur_weight = emb * mask_d
+
+        return self._cur_weight
+
+    def forward(self, x, mask_d=None):
+        if self._cur_weight is None:
+            self.get_weight(mask_d)
+
+        return F.embedding(x, self._cur_weight)
+
+
+class OptEmbedMaskD(nn.Module):
+    """Wrapper to calculate E * mask_d in OptEmbed"""
+
     def __init__(self, num_item, hidden_size):
         super().__init__()
         self._num_item = num_item
