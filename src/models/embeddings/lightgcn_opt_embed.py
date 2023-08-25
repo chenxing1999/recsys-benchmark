@@ -96,7 +96,7 @@ class OptEmbed(IOptEmbed):
         self._norm = norm
 
     def get_l_s(self):
-        return torch.exp(-self._t_param)
+        return torch.exp(-self._t_param).sum()
 
     def _transform_t_to_feat(self):
         if self.mode_threshold_e == "feature":
