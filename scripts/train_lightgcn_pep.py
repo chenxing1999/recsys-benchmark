@@ -37,8 +37,8 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
 
     new_config = copy.deepcopy(base_config)
 
-    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=True)
+    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=False)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=False)
     num_layers = trial.suggest_int("num_layers", 1, 4)
     init_threshold = trial.suggest_float("init_threshold", -10, -5, step=0.1)
 
