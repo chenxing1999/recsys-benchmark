@@ -40,11 +40,10 @@ content-type = "text/markdown"
 [tool.setuptools]
 include-package-data = true
 
-[tool.setuptools.package-data]
-assets=["assets"]
 
 [tool.setuptools.packages.find]
 namespaces = false
+include=["src"]
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"
