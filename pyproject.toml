@@ -20,6 +20,7 @@ dependencies = [
     "torch_tb_profiler",
     "tensorboard",
     "optuna",
+    "psutil",
 ]
 dynamic = ["version"]
 

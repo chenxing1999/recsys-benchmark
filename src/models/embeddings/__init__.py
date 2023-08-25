@@ -3,7 +3,7 @@ from typing import Dict
 
 from .base import IEmbedding, VanillaEmbedding
 from .dh_embedding import DHEmbedding
-from .lightgcn_opt_embed import OptEmbed
+from .lightgcn_opt_embed import OptEmbed, OptEmbedMaskD
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 
@@ -24,6 +24,8 @@ def get_embedding(
         "dhe": DHEmbedding,
         "pep": PepEmbeeding,
         "pep_retrain": RetrainPepEmbedding,
+        "optembed_d": OptEmbedMaskD,
+        "optembed": OptEmbed,
     }
     if name == "vanilla":
         emb = VanillaEmbedding(
@@ -32,9 +34,7 @@ def get_embedding(
             **embedding_config,
         )
     elif name not in name_to_cls:
-        raise NotImplementedError()
-    elif name == "optembed":
-        emb = OptEmbed(num_item, hidden_size)
+        raise NotImplementedError(f"{name} not found in mapping from name to class")
     else:
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
