@@ -130,6 +130,10 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_ndcg = 0
     num_epochs = config["num_epochs"]
+
+    early_stop_count = 0
+    early_stop_config = config.get("early_stop_patience", 0)
+    warmup = config.get("warmup", 0)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = train_epoch(
@@ -172,6 +176,11 @@ def main(argv: Optional[Sequence[str]] = None):
                     "val_metrics": val_metrics,
                 }
                 torch.save(checkpoint, config["checkpoint_path"])
+            elif warmup <= epoch_idx:
+                early_stop_count += 1
+
+                if early_stop_config and early_stop_count > early_stop_config:
+                    return
 
     if config["enable_profile"]:
         train_prof.stop()
