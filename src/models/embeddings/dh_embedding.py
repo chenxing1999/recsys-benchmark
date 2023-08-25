@@ -43,7 +43,7 @@ class DHEmbedding(IEmbedding):
 
         if prime_file is None:
             prime_file = os.path.join(
-                os.path.dirname(__file__), "../../../assets/large_prime_74518.json"
+                os.path.dirname(__file__), "../../assets/large_prime_74518.json"
             )
 
         if isinstance(field_dims, int):
