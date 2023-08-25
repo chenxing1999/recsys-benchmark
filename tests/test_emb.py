@@ -33,9 +33,9 @@ def test_init_logic_qr(num_item, divider, expected_size):
     ],
 )
 def test_init_logic_dhe(num_item, inp_size):
-    emb1 = DHEmbedding(num_item, 64, inp_size, [64])
+    emb1 = DHEmbedding(num_item, 64, None, inp_size, [64])
 
-    emb2 = DHEmbedding(num_item, 64, inp_size, [64])
+    emb2 = DHEmbedding(num_item, 64, None, inp_size, [64])
 
     cache1 = emb1._cache
     cache2 = emb2._cache
