@@ -7,6 +7,16 @@ from .lightgcn_opt_embed import OptEmbed, OptEmbedMaskD
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 
+NAME_TO_CLS = {
+    "vanilla": VanillaEmbedding,
+    "qr": QRHashingEmbedding,
+    "dhe": DHEmbedding,
+    "pep": PepEmbeeding,
+    "pep_retrain": RetrainPepEmbedding,
+    "optembed_d": OptEmbedMaskD,
+    "optembed": OptEmbed,
+}
+
 
 def get_embedding(
     embedding_config: Dict,
@@ -18,15 +28,8 @@ def get_embedding(
     embedding_config = copy.deepcopy(embedding_config)
     embedding_config.pop("name")
 
-    name_to_cls = {
-        "vanilla": VanillaEmbedding,
-        "qr": QRHashingEmbedding,
-        "dhe": DHEmbedding,
-        "pep": PepEmbeeding,
-        "pep_retrain": RetrainPepEmbedding,
-        "optembed_d": OptEmbedMaskD,
-        "optembed": OptEmbed,
-    }
+    name_to_cls = NAME_TO_CLS
+
     if name == "vanilla":
         emb = VanillaEmbedding(
             num_item,

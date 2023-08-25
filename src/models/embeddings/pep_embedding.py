@@ -21,8 +21,8 @@ class PepEmbeeding(IEmbedding):
         self,
         num_item: int,
         hidden_size: int,
-        ori_weight_dir: str,
-        checkpoint_weight_dir: str,
+        ori_weight_dir: str = "",
+        checkpoint_weight_dir: str = "checkpoints",
         field_name: str = "",
         init_threshold: float = -150,
         threshold_type: str = "feature_dim",
@@ -33,7 +33,9 @@ class PepEmbeeding(IEmbedding):
             num_item
             hidden_size
             ori_weight_path: Path to original weight for later retrain
-                with Lottery Ticket
+                with Lottery Ticket. If not given, do nothing
+            checkpoint_weight_dir: Path to save checkpoint. Checkpoint full path
+                will be {checkpoint_weight_dir}/{field_name}/{sparsity}.pth)
             init_threshold: Initialize value for s
             threshold_type: Support `feature_dim`, `feature`, `dimension` and `global
             sparsity
@@ -49,14 +51,17 @@ class PepEmbeeding(IEmbedding):
         self.emb = nn.Embedding(num_item, hidden_size)
         nn.init.xavier_uniform_(self.emb.weight)
 
-        os.makedirs(ori_weight_dir, exist_ok=True)
-        ori_weight_path = os.path.join(ori_weight_dir, field_name + ".pth")
-        torch.save({"state_dict": self.emb.state_dict()}, ori_weight_path)
+        if ori_weight_dir:
+            logger.debug("ori_weight_dir given. Saving initialize checkpoint...")
+            os.makedirs(ori_weight_dir, exist_ok=True)
+            ori_weight_path = os.path.join(ori_weight_dir, field_name + ".pth")
+            torch.save({"state_dict": self.emb.state_dict()}, ori_weight_path)
 
         self.threshold_type = threshold_type
         self.s = self.init_threshold(init_threshold, num_item, hidden_size)
 
         self.field_name = field_name
+
         if field_name:
             checkpoint_weight_dir = os.path.join(checkpoint_weight_dir, field_name)
         os.makedirs(checkpoint_weight_dir, exist_ok=True)
@@ -132,7 +137,7 @@ class RetrainPepEmbedding(IEmbedding):
         num_item: int,
         hidden_size,
         checkpoint_weight_dir,
-        sparsity: Union[float, str],
+        sparsity: Union[float, str] = 0.8,
         ori_weight_dir: Optional[str] = None,
         field_name: str = "",
     ):
@@ -142,9 +147,9 @@ class RetrainPepEmbedding(IEmbedding):
             hidden_size
             checkpoint_weight_dir: Path pep_checkpoint folder
                 The weight to get weight mask from should be
-                    f"{checkpoint_weight_dir}/{field_name}/{sparsity}.pth
+                {checkpoint_weight_dir}/{field_name}/{sparsity}.pth
 
-            sparsity: Target sparsity
+            sparsity: Target sparsity / name of checkpoint in folder
             ori_weight_dir: Path to original weight
                 if not provided, you could try to manually load the original weight
             field_name: Name to field (used to get checkpoint mask path)
@@ -167,9 +172,10 @@ class RetrainPepEmbedding(IEmbedding):
         finish_weight = torch.load(finish_weight_path, map_location="cpu")
         weight = finish_weight["emb.weight"]
         s = finish_weight["s"]
-        self.mask = (torch.abs(weight) - torch.sigmoid(s)) > 0
-        self.mask = self.mask.cuda()
 
+        # convert to nn.Parameter so that when call .to
+        # mask will be moved to correct device
+        self.mask = nn.Parameter((torch.abs(weight) - torch.sigmoid(s)) > 0, False)
         nnz = self.mask.sum()
         self.sparsity = 1 - (nnz / torch.prod(torch.tensor(self.mask.size()))).item()
 
