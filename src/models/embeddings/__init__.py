@@ -22,8 +22,10 @@ def get_embedding(
     embedding_config: Dict,
     num_item: int,
     hidden_size: int,
+    mode=None,
     field_name: str = "",
 ) -> IEmbedding:
+    assert mode in [None, "sum", "mean", "max"], "Unsupported mode"
     name = embedding_config["name"]
     embedding_config = copy.deepcopy(embedding_config)
     embedding_config.pop("name")
@@ -34,6 +36,7 @@ def get_embedding(
         emb = VanillaEmbedding(
             num_item,
             hidden_size,
+            mode=mode,
             **embedding_config,
         )
     elif name not in name_to_cls:
@@ -42,7 +45,7 @@ def get_embedding(
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
         cls = name_to_cls[name]
-        emb = cls(num_item, hidden_size, **embedding_config)
+        emb = cls(num_item, hidden_size, mode=mode, **embedding_config)
 
     embedding_config["name"] = name
     return emb

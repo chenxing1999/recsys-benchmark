@@ -4,6 +4,7 @@ from typing import Final, List, Optional, Union
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from .base import IEmbedding
 
@@ -139,20 +140,30 @@ class DHEmbedding(IEmbedding):
 
     def forward(self, inp: Union[torch.IntTensor, torch.LongTensor]):
         device = self._seq[0].weight.device
+        mode = self._mode
         if self._use_cache:
             cache = self._cache
             cache = cache.to(device)
-            embs = torch.index_select(cache, 0, inp)
+
+            if mode is None:
+                embs = F.embedding(inp, cache)
+            else:
+                embs = F.embedding_bag(inp, cache, mode=mode)
         else:
             vecs = [self._get_hash(item) for item in inp]
             embs = torch.tensor(vecs, device=device)
 
-        outs = self._seq(embs)
+            # Not implement inplace operation like torch.Bag
+            if mode is None:
+                pass
+            elif mode == "sum":
+                embs = embs.sum(1)
+            elif mode == "max":
+                embs = embs.max(1)
+            elif mode == "mean":
+                embs = embs.mean(1)
+            else:
+                raise NotImplementedError()
 
-        # This seems not working ...
-        # if self._use_bn:
-        #     # Normalize factor to make sure std to 0.1
-        #     # If not use BN, I cannot control the exact std anyways
-        #     # So I will ignore that case
-        #     outs = outs * 0.1
+        outs = self._seq(embs)
         return outs

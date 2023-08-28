@@ -112,3 +112,19 @@ def test_api_embedding_pep_retrain():
         inp = torch.randint(num_item, size=(batch_size,))
         res = emb(inp)
         assert res.shape == (batch_size, hidden_size)
+
+
+@pytest.mark.parametrize("name", NOT_PEP)
+def test_api_embedding_bag(name: str):
+    num_item = 3
+    hidden_size = 7
+    batch_size = 11
+    num_fields = 4
+    mode = "mean"
+
+    emb_config = {"name": name}
+    emb = get_embedding(emb_config, num_item, hidden_size, mode)
+    inp = torch.randint(num_item, size=(batch_size, num_fields))
+    res = emb(inp)
+
+    assert res.shape == (batch_size, hidden_size)

@@ -61,6 +61,7 @@ class OptEmbed(IOptEmbed):
         self,
         field_dims: Union[List[int], int],
         hidden_size: int,
+        mode: Optional[str] = None,
         t_init: float = 0,
         mode_threshold_e="field",
         norm=1,
@@ -94,6 +95,7 @@ class OptEmbed(IOptEmbed):
 
         self._cur_weight = None
         self._norm = norm
+        self._mode = mode
 
     def get_l_s(self):
         return torch.exp(-self._t_param).sum()
@@ -144,14 +146,26 @@ class OptEmbed(IOptEmbed):
         if self._cur_weight is None:
             self.get_weight(mask_d)
 
-        return F.embedding(x, self._cur_weight)
+        mode = self._mode
+        if mode is None:
+            return F.embedding(x, self._cur_weight)
+        else:
+            return F.embedding_bag(x, self._cur_weight, mode=mode)
 
 
 class OptEmbedMaskD(IOptEmbed):
     """Wrapper to calculate E * mask_d in OptEmbed"""
 
-    def __init__(self, num_item, hidden_size):
+    def __init__(
+        self,
+        field_dims: Union[List[int], int],
+        hidden_size,
+        mode=None,
+    ):
         super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+        num_item = sum(field_dims)
         self._num_item = num_item
         self._hidden_size = hidden_size
         self._weight = nn.Parameter(torch.empty((num_item, hidden_size)))
@@ -160,6 +174,7 @@ class OptEmbedMaskD(IOptEmbed):
         self._full_mask = get_mask(hidden_size)
 
         self._cur_weight = None
+        self._mode = mode
 
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):
         device = self._weight.data.device
@@ -192,7 +207,11 @@ class OptEmbedMaskD(IOptEmbed):
         if self._cur_weight is None:
             self.get_weight(mask_d)
 
-        return F.embedding(x, self._cur_weight)
+        mode = self._mode
+        if mode is None:
+            return F.embedding(x, self._cur_weight)
+        else:
+            return F.embedding_bag(x, self._cur_weight, mode=mode)
 
 
 # Evo

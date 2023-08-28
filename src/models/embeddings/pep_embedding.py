@@ -21,6 +21,7 @@ class PepEmbeeding(IEmbedding):
         self,
         num_item: int,
         hidden_size: int,
+        mode: Optional[str] = None,
         ori_weight_dir: str = "",
         checkpoint_weight_dir: str = "checkpoints",
         field_name: str = "",
@@ -66,6 +67,7 @@ class PepEmbeeding(IEmbedding):
             checkpoint_weight_dir = os.path.join(checkpoint_weight_dir, field_name)
         os.makedirs(checkpoint_weight_dir, exist_ok=True)
         self.checkpoint_weight_dir = checkpoint_weight_dir
+        self._mode = mode
 
     def get_weight(self):
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
@@ -73,7 +75,10 @@ class PepEmbeeding(IEmbedding):
 
     def forward(self, x):
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
-        xv = F.embedding(x, sparse_weight)
+        if self._mode:
+            xv = F.embedding_bag(x, sparse_weight, mode=self._mode)
+        else:
+            xv = F.embedding(x, sparse_weight)
 
         return xv
 
@@ -136,6 +141,7 @@ class RetrainPepEmbedding(IEmbedding):
         self,
         num_item: int,
         hidden_size,
+        mode: Optional[str],
         checkpoint_weight_dir,
         sparsity: Union[float, str] = 0.8,
         ori_weight_dir: Optional[str] = None,
@@ -178,6 +184,7 @@ class RetrainPepEmbedding(IEmbedding):
         self.mask = nn.Parameter((torch.abs(weight) - torch.sigmoid(s)) > 0, False)
         nnz = self.mask.sum()
         self.sparsity = 1 - (nnz / torch.prod(torch.tensor(self.mask.size()))).item()
+        self._mode = mode
 
     def get_weight(self):
         sparse_emb = self.emb.weight * self.mask
@@ -185,7 +192,11 @@ class RetrainPepEmbedding(IEmbedding):
 
     def forward(self, x):
         sparse_emb = self.emb.weight * self.mask
-        return F.embedding(x, sparse_emb)
+        if self._mode:
+            xv = F.embedding_bag(x, sparse_emb, mode=self._mode)
+        else:
+            xv = F.embedding(x, sparse_emb)
+        return xv
 
     def get_sparsity(self):
         return self.sparsity
