@@ -8,10 +8,9 @@ import tempfile
 
 import optuna
 import torch
+import train_lightgcn
 import yaml
 from loguru import logger
-
-import train_lightgcn
 
 DEFAULT_BASE_CONFIG_PATH = "../configs/lightgcn_config.yaml"
 DEFAULT_BASE_CONFIG_PATH = os.path.join(
