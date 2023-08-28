@@ -1,5 +1,5 @@
 import math
-from typing import Literal, Optional
+from typing import List, Literal, Optional, Union
 
 import torch
 from torch import nn
@@ -14,19 +14,20 @@ class QRHashingEmbedding(IEmbedding):
 
     def __init__(
         self,
-        num_item: int,
+        field_dims: Union[int, List[int]],
         hidden_size: int,
+        mode: Optional[str] = None,
         divider: Optional[int] = None,
         operation: Literal["cat", "add", "mult"] = "mult",
         initializer="uniform",
     ):
         """
         Args:
-            num_item: Categorical feature size
+            field_dims: Categorical feature sizes
             hidden_size: Output embedding hidden size.
                 For simplicity, we dont allow different size for concatenate feature
 
-            divider:
+            divider: Hash collision mentioned in the paper
             operation: Support:
                 cat (concatenate): Concatenating feature
                 add: Adding feature to each other
@@ -38,6 +39,11 @@ class QRHashingEmbedding(IEmbedding):
         if operation == "cat":
             assert hidden_size % 2 == 0
 
+        if isinstance(field_dims, int):
+            field_dims: List[int] = [field_dims]
+
+        num_item = sum(field_dims)
+
         if divider is None:
             divider = int(math.sqrt(num_item))
 
@@ -48,8 +54,14 @@ class QRHashingEmbedding(IEmbedding):
         self._operation = operation
 
         size = (num_item - 1) // divider + 1
-        self.emb1 = nn.Embedding(divider, emb_size)
-        self.emb2 = nn.Embedding(size, emb_size)
+
+        if mode is None:
+            self.emb1 = nn.Embedding(divider, emb_size)
+            self.emb2 = nn.Embedding(size, emb_size)
+        else:
+            self.emb1 = nn.EmbeddingBag(divider, emb_size, mode=mode)
+            self.emb2 = nn.EmbeddingBag(size, emb_size, mode=mode)
+
         self._hidden_size = hidden_size
         self._divider = divider
         self._num_item = num_item
@@ -93,7 +105,7 @@ class QRHashingEmbedding(IEmbedding):
         elif self._operation == "mult":
             return emb1 * emb2
         else:
-            raise NotImplementedError()
+            raise NotImplementedError("Unsupported operation: {self._operation}")
 
     def get_weight(self):
         arr = torch.arange(self._num_item, device=self.emb1.weight.device)

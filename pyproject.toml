@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=61",
     "setuptools_scm[toml]",
     "wheel",
 ]
@@ -42,6 +42,12 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 namespaces = false
+where=["."]
+include=["src"]
+
+[tool.setuptools.package-data]
+assets = ["*.json"]
+
 
 [tool.setuptools_scm]
 version_scheme = "no-guess-dev"

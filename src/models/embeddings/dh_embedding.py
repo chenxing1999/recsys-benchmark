@@ -1,11 +1,15 @@
 import json
 import os
-from typing import List, Optional, Union
+from typing import Final, List, Optional, Union
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from .base import IEmbedding
+
+LARGE_INT: Final[int] = int(1e9)
+NEGATIVE_LARGE_INT: Final[int] = -LARGE_INT
 
 
 class DHEmbedding(IEmbedding):
@@ -14,8 +18,9 @@ class DHEmbedding(IEmbedding):
 
     def __init__(
         self,
-        num_item: int,
+        field_dims: Union[int, List[int]],
         out_size: int,
+        mode: Optional[str] = None,
         inp_size: int = 1024,
         hidden_sizes: Optional[List[int]] = None,
         use_bn: bool = True,
@@ -24,7 +29,7 @@ class DHEmbedding(IEmbedding):
     ):
         """
         Args:
-            num_item: Number of embedding item (it is here to keep API format)
+            field_dims: Categorical feature sizes (it is here to keep API format)
             out_size: Last layer output size (it is here to keep API format)
 
             inp_size: Input size / `k` in the paper
@@ -42,6 +47,10 @@ class DHEmbedding(IEmbedding):
                 os.path.dirname(__file__), "../../assets/large_prime_74518.json"
             )
 
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        num_item = sum(field_dims)
         self.m = int(1e6)
         with open(prime_file) as fin:
             primes = json.load(fin)
@@ -69,6 +78,8 @@ class DHEmbedding(IEmbedding):
         self._use_cache = cached
         self._use_bn = use_bn
 
+        self._mode = mode
+
         if cached:
             self._init_all_hash()
 
@@ -88,8 +99,6 @@ class DHEmbedding(IEmbedding):
         m = self.m
 
         primes = self._primes
-        LARGE_INT = int(1e9)
-        NEGATIVE_LARGE_INT = -LARGE_INT
         k = self._inp_size
 
         # Setting torch manual seed as item instead of 0
@@ -116,6 +125,7 @@ class DHEmbedding(IEmbedding):
         return encod
 
     def _init_all_hash(self):
+        """Initialize hash value for all items and store it in cache"""
         cache = []
         for item in range(self._num_item):
             cache.append(self._get_hash(item))
@@ -128,22 +138,32 @@ class DHEmbedding(IEmbedding):
         cache = cache.to(device)
         self._cache = cache
 
-    def forward(self, inp: torch.IntTensor):
+    def forward(self, inp: Union[torch.IntTensor, torch.LongTensor]):
         device = self._seq[0].weight.device
+        mode = self._mode
         if self._use_cache:
             cache = self._cache
             cache = cache.to(device)
-            embs = torch.index_select(cache, 0, inp)
+
+            if mode is None:
+                embs = F.embedding(inp, cache)
+            else:
+                embs = F.embedding_bag(inp, cache, mode=mode)
         else:
             vecs = [self._get_hash(item) for item in inp]
             embs = torch.tensor(vecs, device=device)
 
-        outs = self._seq(embs)
+            # Not implement inplace operation like torch.Bag
+            if mode is None:
+                pass
+            elif mode == "sum":
+                embs = embs.sum(1)
+            elif mode == "max":
+                embs = embs.max(1)
+            elif mode == "mean":
+                embs = embs.mean(1)
+            else:
+                raise NotImplementedError()
 
-        # This seems not working ...
-        # if self._use_bn:
-        #     # Normalize factor to make sure std to 0.1
-        #     # If not use BN, I cannot control the exact std anyways
-        #     # So I will ignore that case
-        #     outs = outs * 0.1
+        outs = self._seq(embs)
         return outs
