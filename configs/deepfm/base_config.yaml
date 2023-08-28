@@ -9,28 +9,22 @@ model:
 
 train_dataloader:
   dataset:
-    path: /home/xing/Workspace/phd/raw_data/samples/train_criteo.txt
-    cache_path: .criteo/samples.bin
-  num_workers: 4
-  batch_size: 2048
-
-_train_dataloader:
-  dataset:
-    path: /home/xing/Workspace/phd/raw_data/criteo/train.txt
-    cache_path: .criteo/train.bin
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/.criteo/train.bin
   num_workers: 4
   batch_size: 2048
 
 val_dataloader:
   dataset:
-    path: /home/xing/Workspace/phd/raw_data/samples/valid_criteo.txt
-    cache_path: .criteo/samples_val.bin
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/.criteo/val.bin
   batch_size: 2048
   num_workers: 4
 
 test_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/test.txt
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/.criteo/test.bin
   batch_size: 2048
   num_workers: 4
 

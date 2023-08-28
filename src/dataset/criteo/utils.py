@@ -26,6 +26,8 @@ def get_cache_data(
 
         save_line
 
+        lines: List of line idx will be dataset
+
     Returns: Dict[str, Any]
 
         feat_mappers: (FeatMapper)
@@ -45,10 +47,13 @@ def get_cache_data(
     line_idx_to_byte_loc = []
     with open(path) as fin:
         loc = 0
-        for line in fin:
+        for idx, line in enumerate(fin):
             loc += len(line)
             values = line.rstrip("\n").split("\t")
             if len(values) != NUM_FEATS + 1:
+                continue
+
+            if lines and idx not in lines:
                 continue
 
             for i in range(1, NUM_INT_FEATS + 1):

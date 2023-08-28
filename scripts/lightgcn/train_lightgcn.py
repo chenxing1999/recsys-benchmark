@@ -101,7 +101,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     if config["run_test"]:
         checkpoint = torch.load(config["checkpoint_path"])
-        model.load_state_dict(checkpoint["state_dict"])
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
 
         val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
         for key, value in val_metrics.items():

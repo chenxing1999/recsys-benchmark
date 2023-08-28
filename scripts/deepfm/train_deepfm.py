@@ -182,8 +182,6 @@ def main(argv: Optional[Sequence[str]] = None):
                     val_dataloader,
                     model,
                     device,
-                    filter_item_on_train=True,
-                    profiler=val_prof,
                 )
 
                 val_metrics.update(metrics.get_env_metrics())
