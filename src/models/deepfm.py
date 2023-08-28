@@ -26,12 +26,17 @@ class DeepFM(nn.Module):
         """
 
         super().__init__()
-        num_inputs = int(sum(field_dims))
 
         if not embedding_config:
             embedding_config = {"name": "vanilla"}
 
-        self.embedding = get_embedding(embedding_config, num_inputs, num_factor)
+        num_inputs = sum(field_dims)
+        self.embedding = get_embedding(
+            embedding_config,
+            field_dims,
+            num_factor,
+            mode=None,
+        )
 
         self.fc = nn.Embedding(num_inputs, 1)
         self.linear_layer = nn.Linear(1, 1)

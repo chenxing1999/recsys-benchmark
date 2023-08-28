@@ -18,7 +18,7 @@ class CriteoDataset(Dataset, ICriteoDatset):
     """
     Note: This implementation is based on pytorch-fm original implementation.
         The main difference is removing lmdb and changing reading logic.
-        On my laptop, this improve training speed by around 10 times.
+        On my laptop, this improves training speed by around 10 times.
     """
 
     NUM_INT_FEATS: Final[int] = 13

@@ -1,122 +1,16 @@
 import argparse
-import gc
 import os
 from typing import Dict, Optional, Sequence, Union
 
-import loguru
 import torch
 import yaml
-from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
 from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
-
-
-def train_epoch(
-    dataloader: DataLoader,
-    model: DeepFM,
-    optimizer,
-    device="cuda",
-    log_step=10,
-    profiler=None,
-) -> Dict[str, float]:
-    model.train()
-    model.to(device)
-
-    loss_dict = dict(loss=0)
-    criterion = torch.nn.BCEWithLogitsLoss()
-    criterion = criterion.to(device)
-    for idx, batch in enumerate(dataloader):
-        inputs, labels = batch
-
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        outputs = model(inputs)
-
-        loss = criterion(outputs, labels.float())
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_dict["loss"] += loss.item()
-
-        # Logging
-        if log_step and idx % log_step == 0:
-            msg = f"Idx: {idx}"
-
-            for metric, value in loss_dict.items():
-                if value > 0:
-                    avg = value / (idx + 1)
-                    msg += f" - {metric}: {avg:.2}"
-
-            loguru.logger.info(msg)
-            gc.collect()
-
-        if profiler:
-            profiler.step()
-
-    for metric, value in loss_dict.items():
-        avg = value / (idx + 1)
-        loss_dict[metric] = avg
-
-    return loss_dict
-
-
-@torch.no_grad()
-def validate_epoch(
-    val_loader: DataLoader,
-    model: DeepFM,
-    device="cuda",
-    k=20,
-    filter_item_on_train=True,
-    profiler=None,
-) -> Dict[str, float]:
-    """Validate single epoch performance
-
-    Args:
-        train_dataset (For getting num_users and norm_adj)
-        val_dataloader
-        model
-        device
-        k
-        filter_item_on_train: Remove item that user already interacted on train
-    Returns:
-        "ndcg"
-    """
-
-    model.eval()
-    model = model.to(device)
-
-    criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
-    criterion = criterion.to(device)
-
-    log_loss = 0
-    all_y_true = []
-    all_y_pred = []
-
-    for idx, batch in enumerate(val_loader):
-        inputs, labels = batch
-        all_y_true.extend(labels.tolist())
-
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        outputs = model(inputs)
-        log_loss += criterion(outputs, labels.float()).item()
-
-        outputs = torch.sigmoid(outputs)
-        all_y_pred.extend(outputs.cpu().tolist())
-
-    auc = roc_auc_score(all_y_true, all_y_pred)
-    log_loss = log_loss / len(all_y_pred)
-    return {
-        "auc": auc,
-        "log_loss": log_loss,
-    }
+from src.trainer.deepfm import train_epoch, validate_epoch
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:

@@ -1,7 +1,7 @@
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import Any, DefaultDict, Dict, Final, Set
+from typing import Any, DefaultDict, Dict, Final, Optional, Set
 
 NUM_INT_FEATS: Final[int] = 13
 NUM_FEATS: Final[int] = 39
@@ -14,6 +14,7 @@ def get_cache_data(
     path: str,
     min_threshold: int = 10,
     save_line=False,
+    lines: Optional[Set[int]] = None,
 ) -> Dict[str, Any]:
     """Get cache object
 
