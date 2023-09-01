@@ -1,0 +1,76 @@
+model:
+  num_factor: 64
+  hidden_sizes:
+    - 400
+    - 400
+    - 400
+  p_dropout: 0.2
+  use_batchnorm: False
+  embedding_config:
+    name: pep_retrain
+    ori_weight_dir: "checkpoints/pep_ori"
+    checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
+    sparsity: 1986
+
+train_dataloader:
+  dataset:
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/train.bin
+  num_workers: 8
+  batch_size: 1024
+  shuffle: True
+
+val_dataloader:
+  dataset:
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/val.bin
+  batch_size: 1024
+  num_workers: 8
+
+test_dataloader:
+  dataset:
+    path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/test.bin
+  batch_size: 1024
+  num_workers: 8
+
+run_test: false
+
+checkpoint_path: checkpoints/deepfm_checkpoint.pth
+num_epochs: 1000
+log_step: 100
+
+weight_decay: 0.00001
+learning_rate: 0.001
+validate_step: 1
+
+enable_profile: false
+
+profilers:
+  train_profiler:
+    log_path: logs/lightgcn/train
+    # Check pytorch document on profiler for more information
+    # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+  val_profiler:
+    log_path: logs/lightgcn/val
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: true
+
+logger:
+  level: INFO
+  log_folder: logs/deepfm
+  log_name: original-pep-v4
