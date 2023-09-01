@@ -4,7 +4,7 @@ import os
 import torch
 import tqdm
 from loguru import logger
-from sklearn.model_selection import train_test_split
+from torch.utils.data import random_split
 
 from src.dataset.criteo.utils import get_cache_data
 
@@ -29,6 +29,8 @@ def parse_args(argv=None):
 
 args = parse_args()
 # Only use train file as only it have label
+
+
 inp_path = args.inp_path
 fin = open(inp_path)
 line_indices = []
@@ -45,14 +47,24 @@ for idx, line in enumerate(tqdm.tqdm(fin)):
     labels.append(label)
 
 
-x_train, x_test, y_train, _ = train_test_split(
-    line_indices, labels, test_size=0.2, random_state=1, stratify=labels
-)
-x_train, x_val = train_test_split(
-    x_train, test_size=0.1, random_state=1, stratify=y_train
-)
-del y_train
+# Train test split with sklearn
+# x_train, x_test, y_train, _ = train_test_split(
+#     line_indices, labels, test_size=0.2, random_state=1, stratify=labels
+# )
+# x_train, x_val = train_test_split(
+#     x_train, test_size=0.1, random_state=1, stratify=y_train
+# )
+# del y_train
 
+# Train test split with pytorch
+num_train = int(0.8 * len(line_indices))
+num_val = int(0.1 * len(line_indices))
+num_test = len(line_indices) - num_train - num_val
+x_train, x_val, x_test = random_split(line_indices, (num_train, num_val, num_test))
+
+x_train = list(x_train)
+x_val = list(x_val)
+x_test = list(x_test)
 
 logger.info(f"n_train: {len(x_train)}, n_test: {len(x_test)}, n_val {len(x_val)}")
 x_train = set(x_train)
@@ -71,7 +83,16 @@ torch.save(
     tmp_path,
 )
 
+data = torch.load(tmp_path)
+x_train = data["train"]
+x_test = data["test"]
+x_val = data["val"]
 
+
+info = None
+info = get_cache_data(args.inp_path, args.min_threshold)
+
+# V1
 logger.info("Creating cache file for train val test")
 train_info = get_cache_data(
     args.inp_path,
@@ -79,7 +100,14 @@ train_info = get_cache_data(
     args.save_line,
     x_train,
 )
+
+if info:
+    train_info["feat_mappers"] = info["feat_mappers"]
+    train_info["defaults"] = info["defaults"]
+
 tmp_path = os.path.join(args.out_folder, "train.bin")
+
+
 torch.save(train_info, tmp_path)
 del train_info
 

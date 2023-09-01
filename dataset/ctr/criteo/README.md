@@ -14,3 +14,8 @@ tar xf criteo-research-kaggle-display-advertising-challenge-dataset.tar.gz
 # and format data to binary format
 python preprocess.py
 ```
+
+note for me:
+
+- Common train val test split is 80-10-10
+- My train val test split is 72-8-20

@@ -10,10 +10,76 @@ from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
-from src.trainer.deepfm import train_epoch, validate_epoch
+from src.trainer.deepfm import *
+from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
+
+
+def train_epoch(
+    dataloader: DataLoader,
+    model: DeepFM,
+    optimizer,
+    device="cuda",
+    log_step=10,
+    profiler=None,
+    clip_grad=0,
+) -> Dict[str, float]:
+    model.train()
+    model.to(device)
+
+    value = model.embedding.get_sparsity()
+    loss_dict = dict(loss=0)
+    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = criterion.to(device)
+    for idx, batch in enumerate(dataloader):
+        inputs, labels = batch
+
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        outputs = model(inputs)
+
+        loss = criterion(outputs, labels.float())
+        optimizer.zero_grad()
+        loss.backward()
+        if clip_grad:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+        optimizer.step()
+
+        loss_dict["loss"] += loss.item()
+
+        # Logging
+        if log_step and idx % log_step == 0:
+            msg = f"Idx: {idx}"
+
+            with torch.no_grad():
+                sparsity, n_params = model.embedding.get_sparsity(True)
+            msg += f" - params: {n_params}"
+            for metric, value in loss_dict.items():
+                if value > 0:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.4}"
+
+            loguru.logger.info(msg)
+
+        if idx % 100 == 0:
+            with torch.no_grad():
+                sparsity, n_params = model.embedding.get_sparsity(True)
+            if n_params <= 1300:
+                path = os.path.join(model.embedding.checkpoint_weight_dir, f"1300.pth")
+                torch.save(model.embedding.state_dict(), path)
+                print("Saved target n_params model")
+
+        if profiler:
+            profiler.step()
+
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        loss_dict[metric] = avg
+
+    return loss_dict
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -111,6 +177,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
     val_dataset.pop_info()
+    val_dataset.describe()
 
     val_dataloader = DataLoader(
         val_dataset,
@@ -147,6 +214,7 @@ def main(argv: Optional[Sequence[str]] = None):
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
     )
+    torch.optim.lr_scheduler.ExponentialLR(optimizer, 1.0)
 
     num_params = 0
     for p in model.parameters():
@@ -162,8 +230,10 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
+    is_pep = model_config["embedding_config"]["name"] == "pep"
     best_auc = 0
     num_epochs = config["num_epochs"]
+    clip_grad = 100
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -174,6 +244,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 device,
                 config["log_step"],
                 train_prof,
+                clip_grad,
             )
 
             train_metrics.update(metrics.get_env_metrics())
@@ -202,6 +273,17 @@ def main(argv: Optional[Sequence[str]] = None):
                         "val_metrics": val_metrics,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
+
+                if is_pep:
+                    sparsity, n_params = model.embedding.get_sparsity(True)
+                    logger.log_metric("sparsity", sparsity, epoch_idx)
+                    logger.info(f"{n_params=}")
+                    path = os.path.join(
+                        model.embedding.checkpoint_weight_dir, f"1986.pth"
+                    )
+                    if n_params <= 1986 and not os.path.exists(path):
+                        torch.save(model.embedding.state_dict(), path)
+
     except KeyboardInterrupt:
         pass
 

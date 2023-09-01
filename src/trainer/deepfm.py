@@ -15,10 +15,12 @@ def train_epoch(
     device="cuda",
     log_step=10,
     profiler=None,
+    clip_grad=0,
 ) -> Dict[str, float]:
     model.train()
     model.to(device)
 
+    value = model.embedding.get_sparsity()
     loss_dict = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
@@ -33,6 +35,8 @@ def train_epoch(
         loss = criterion(outputs, labels.float())
         optimizer.zero_grad()
         loss.backward()
+        if clip_grad:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
         optimizer.step()
 
         loss_dict["loss"] += loss.item()
@@ -44,7 +48,7 @@ def train_epoch(
             for metric, value in loss_dict.items():
                 if value > 0:
                     avg = value / (idx + 1)
-                    msg += f" - {metric}: {avg:.2}"
+                    msg += f" - {metric}: {avg:.4}"
 
             loguru.logger.info(msg)
 

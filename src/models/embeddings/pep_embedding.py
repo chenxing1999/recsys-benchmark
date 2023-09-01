@@ -19,7 +19,7 @@ class PepEmbeeding(IEmbedding):
 
     def __init__(
         self,
-        num_item: int,
+        field_dims: Union[List[int], int],
         hidden_size: int,
         mode: Optional[str] = None,
         ori_weight_dir: str = "",
@@ -31,7 +31,7 @@ class PepEmbeeding(IEmbedding):
     ):
         """
         Args:
-            num_item
+            field_dims
             hidden_size
             ori_weight_path: Path to original weight for later retrain
                 with Lottery Ticket. If not given, do nothing
@@ -42,6 +42,10 @@ class PepEmbeeding(IEmbedding):
             sparsity
         """
         super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        num_item = sum(field_dims)
 
         if sparsity is None:
             sparsity = [0.8, 0.9, 0.99]
@@ -110,11 +114,15 @@ class PepEmbeeding(IEmbedding):
             raise ValueError("Invalid threshold_type: {}".format(self.threshold_type))
         return s
 
-    def get_sparsity(self) -> float:
+    def get_sparsity(self, get_n_params=False) -> float:
         total_params = self.emb.weight.numel()
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
-        n_params = (sparse_weight != 0).sum()
-        return (1 - n_params / total_params).item()
+        # n_params = (sparse_weight != 0).sum(dtype=torch.int64).item()
+        n_params = torch.nonzero(sparse_weight).size(0)
+        if get_n_params:
+            return (1 - n_params / total_params), n_params
+        else:
+            return 1 - n_params / total_params
 
     def train_callback(self):
         """Callback to save weight to `checkpoint_weight_dir`"""
@@ -139,7 +147,7 @@ class RetrainPepEmbedding(IEmbedding):
 
     def __init__(
         self,
-        num_item: int,
+        field_dims: Union[List[int], int],
         hidden_size,
         mode: Optional[str],
         checkpoint_weight_dir,
@@ -149,7 +157,7 @@ class RetrainPepEmbedding(IEmbedding):
     ):
         """
         Args:
-            num_item
+            field_dims
             hidden_size
             checkpoint_weight_dir: Path pep_checkpoint folder
                 The weight to get weight mask from should be
@@ -161,6 +169,11 @@ class RetrainPepEmbedding(IEmbedding):
             field_name: Name to field (used to get checkpoint mask path)
         """
         super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        num_item = sum(field_dims)
+
         self.emb = nn.Embedding(num_item, hidden_size)
 
         if ori_weight_dir:

@@ -124,8 +124,9 @@ class CriteoDataset(Dataset, ICriteoDatset):
 
     def describe(self):
         logger.info("Normal Criteo Dataset")
-        logger.info("Num data:", self.num_data)
-        logger.info("Field dims", self.field_dims)
+        logger.info(f"Num data: {self.num_data}")
+        logger.info(f"Field dims {self.field_dims}")
+        logger.info(f"sum dims {sum(self.field_dims)}")
 
 
 if __name__ == "__main__":

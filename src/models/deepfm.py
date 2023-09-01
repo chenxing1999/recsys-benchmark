@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Sequence
 
+import torch
 from torch import nn
 
 from .embeddings import IEmbedding, get_embedding
@@ -14,6 +15,7 @@ class DeepFM(nn.Module):
         num_factor: int,
         hidden_sizes: List[int],
         p_dropout: float = 0.1,
+        use_batchnorm=False,
         embedding_config: Optional[Dict] = None,
     ):
         """
@@ -36,17 +38,20 @@ class DeepFM(nn.Module):
             field_dims,
             num_factor,
             mode=None,
+            field_name="deepfm",
         )
 
-        self.fc = nn.Embedding(num_inputs, 1)
+        self.fc = nn.EmbeddingBag(num_inputs, 1, mode="sum")
         self.linear_layer = nn.Linear(1, 1)
+        self._bias = nn.Parameter(torch.zeros(1))
 
         deep_branch_inp = num_factor * len(field_dims)
-        p_dropout = 0.1
 
         layers = []
         for size in hidden_sizes:
             layers.append(nn.Linear(deep_branch_inp, size))
+            if use_batchnorm:
+                layers.append(nn.BatchNorm1d(size))
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(p_dropout))
 
@@ -70,7 +75,8 @@ class DeepFM(nn.Module):
         sum_of_square = emb.pow(2).sum(dim=1)
 
         # x_1 = alpha * WX + b
-        x = self.linear_layer(self.fc(x).sum(1))
+        x = self.fc(x) + self._bias
+        # x = self.fc(x) + self._bias
         # x_2 = alpha * WX + b + 0.5 ((\sum e_i)^2 - (\sum e_i^2))
         y_fm = x + 0.5 * (square_of_sum - sum_of_square).sum(1, keepdims=True)
 
