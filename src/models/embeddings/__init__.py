@@ -1,5 +1,5 @@
 import copy
-from typing import Dict
+from typing import Dict, List, Optional, Union
 
 from .base import IEmbedding, VanillaEmbedding
 from .dh_embedding import DHEmbedding
@@ -20,9 +20,9 @@ NAME_TO_CLS = {
 
 def get_embedding(
     embedding_config: Dict,
-    num_item: int,
+    field_dims: Union[int, List[int]],
     hidden_size: int,
-    mode=None,
+    mode: Optional[str] = None,
     field_name: str = "",
 ) -> IEmbedding:
     assert mode in [None, "sum", "mean", "max"], "Unsupported mode"
@@ -34,7 +34,7 @@ def get_embedding(
 
     if name == "vanilla":
         emb = VanillaEmbedding(
-            num_item,
+            field_dims,
             hidden_size,
             mode=mode,
             **embedding_config,
@@ -45,7 +45,7 @@ def get_embedding(
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
         cls = name_to_cls[name]
-        emb = cls(num_item, hidden_size, mode=mode, **embedding_config)
+        emb = cls(field_dims, hidden_size, mode=mode, **embedding_config)
 
     embedding_config["name"] = name
     return emb

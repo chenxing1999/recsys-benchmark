@@ -6,11 +6,10 @@ import tempfile
 from typing import Dict, List, Tuple
 
 import torch
+import train_lightgcn
 import yaml
 from loguru import logger
 from torch.utils.tensorboard import SummaryWriter
-
-import train_lightgcn
 
 BASE_CONFIG = "../configs/lightgcn_config.yaml"
 BASE_CONFIG = os.path.join(os.path.dirname(__file__), BASE_CONFIG)

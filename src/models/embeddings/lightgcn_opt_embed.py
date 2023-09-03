@@ -160,6 +160,7 @@ class OptEmbedMaskD(IOptEmbed):
         self,
         field_dims: Union[List[int], int],
         hidden_size,
+        target_sparsity=None,
         mode=None,
     ):
         super().__init__()
@@ -175,6 +176,8 @@ class OptEmbedMaskD(IOptEmbed):
 
         self._cur_weight = None
         self._mode = mode
+        self._target_sparsity = target_sparsity
+        self._naive = False
 
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):
         device = self._weight.data.device
@@ -182,9 +185,12 @@ class OptEmbedMaskD(IOptEmbed):
 
         if self.training:
             if mask_d is None:
-                indices = torch.randint(
-                    0, self._hidden_size, (self._num_item,), device=device
-                )
+                indices = _sampling_by_weight(
+                    self._target_sparsity,
+                    self._hidden_size,
+                    self._num_item,
+                    self._naive,
+                ).to(device)
                 mask_d = F.embedding(indices, self._full_mask)
 
             self._cur_weight = self._weight * mask_d
@@ -236,6 +242,8 @@ def _generate_lightgcn_candidate(
         ),
     )
 
+    if target_sparsity is None:
+        return candidate
     cur_sparsity = _get_sparsity(candidate, hidden_size)
     step = 1.05
     while cur_sparsity < target_sparsity:

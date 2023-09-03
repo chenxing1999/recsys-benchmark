@@ -18,7 +18,7 @@ class CriteoDataset(Dataset, ICriteoDatset):
     """
     Note: This implementation is based on pytorch-fm original implementation.
         The main difference is removing lmdb and changing reading logic.
-        On my laptop, this improve training speed by around 10 times.
+        On my laptop, this improves training speed by around 10 times.
     """
 
     NUM_INT_FEATS: Final[int] = 13
@@ -84,6 +84,9 @@ class CriteoDataset(Dataset, ICriteoDatset):
         self.field_dims = [
             len(self.feat_mappers[i + 1]) + 1 for i in range(self.NUM_FEATS)
         ]
+        field_dims = torch.tensor(self.field_dims)
+        field_dims = torch.cat([torch.tensor([0], dtype=torch.long), field_dims])
+        self.offsets = torch.cumsum(field_dims[:-1], 0)
 
         self.path = path
 
@@ -109,7 +112,9 @@ class CriteoDataset(Dataset, ICriteoDatset):
         for i in range(self.NUM_INT_FEATS + 1, self.NUM_FEATS + 1):
             feats[i - 1] = feat_mapper[i][line[i]]
 
-        return torch.tensor(feats), label
+        feats = torch.tensor(feats)
+        feats = feats + self.offsets
+        return feats, label
 
     def pop_info(self):
         # TODO: Refactor this
@@ -124,8 +129,9 @@ class CriteoDataset(Dataset, ICriteoDatset):
 
     def describe(self):
         logger.info("Normal Criteo Dataset")
-        logger.info("Num data:", self.num_data)
-        logger.info("Field dims", self.field_dims)
+        logger.info(f"Num data: {self.num_data}")
+        logger.info(f"Field dims {self.field_dims}")
+        logger.info(f"sum dims {sum(self.field_dims)}")
 
 
 if __name__ == "__main__":

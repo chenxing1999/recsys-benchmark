@@ -1,18 +1,21 @@
 import argparse
-import gc
 import os
 from typing import Dict, Optional, Sequence, Union
 
 import loguru
 import torch
 import yaml
-from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
 from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
+from src.trainer.deepfm import validate_epoch
+from src.utils import set_seed
+
+set_seed(2023)
+TARGET_SPARSITY = 1300
 
 
 def train_epoch(
@@ -22,10 +25,12 @@ def train_epoch(
     device="cuda",
     log_step=10,
     profiler=None,
+    clip_grad=0,
 ) -> Dict[str, float]:
     model.train()
     model.to(device)
 
+    value = model.embedding.get_sparsity()
     loss_dict = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
@@ -40,6 +45,8 @@ def train_epoch(
         loss = criterion(outputs, labels.float())
         optimizer.zero_grad()
         loss.backward()
+        if clip_grad:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
         optimizer.step()
 
         loss_dict["loss"] += loss.item()
@@ -48,13 +55,22 @@ def train_epoch(
         if log_step and idx % log_step == 0:
             msg = f"Idx: {idx}"
 
+            with torch.no_grad():
+                sparsity, n_params = model.embedding.get_sparsity(True)
+            msg += f" - params: {n_params}"
             for metric, value in loss_dict.items():
                 if value > 0:
                     avg = value / (idx + 1)
-                    msg += f" - {metric}: {avg:.2}"
+                    msg += f" - {metric}: {avg:.4}"
+            if n_params <= TARGET_SPARSITY:
+                path = os.path.join(
+                    model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
+                )
+                loguru.logger.info(f"Saved {TARGET_SPARSITY}")
+                if not os.path.exists(path):
+                    torch.save(model.embedding.state_dict(), path)
 
             loguru.logger.info(msg)
-            gc.collect()
 
         if profiler:
             profiler.step()
@@ -64,59 +80,6 @@ def train_epoch(
         loss_dict[metric] = avg
 
     return loss_dict
-
-
-@torch.no_grad()
-def validate_epoch(
-    val_loader: DataLoader,
-    model: DeepFM,
-    device="cuda",
-    k=20,
-    filter_item_on_train=True,
-    profiler=None,
-) -> Dict[str, float]:
-    """Validate single epoch performance
-
-    Args:
-        train_dataset (For getting num_users and norm_adj)
-        val_dataloader
-        model
-        device
-        k
-        filter_item_on_train: Remove item that user already interacted on train
-    Returns:
-        "ndcg"
-    """
-
-    model.eval()
-    model = model.to(device)
-
-    criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
-    criterion = criterion.to(device)
-
-    log_loss = 0
-    all_y_true = []
-    all_y_pred = []
-
-    for idx, batch in enumerate(val_loader):
-        inputs, labels = batch
-        all_y_true.extend(labels.tolist())
-
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        outputs = model(inputs)
-        log_loss += criterion(outputs, labels.float()).item()
-
-        outputs = torch.sigmoid(outputs)
-        all_y_pred.extend(outputs.cpu().tolist())
-
-    auc = roc_auc_score(all_y_true, all_y_pred)
-    log_loss = log_loss / len(all_y_pred)
-    return {
-        "auc": auc,
-        "log_loss": log_loss,
-    }
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -214,6 +177,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
     val_dataset.pop_info()
+    val_dataset.describe()
 
     val_dataloader = DataLoader(
         val_dataset,
@@ -250,6 +214,7 @@ def main(argv: Optional[Sequence[str]] = None):
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
     )
+    torch.optim.lr_scheduler.ExponentialLR(optimizer, 1.0)
 
     num_params = 0
     for p in model.parameters():
@@ -265,8 +230,10 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
+    is_pep = model_config["embedding_config"]["name"] == "pep"
     best_auc = 0
     num_epochs = config["num_epochs"]
+    clip_grad = 100
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -277,6 +244,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 device,
                 config["log_step"],
                 train_prof,
+                clip_grad,
             )
 
             train_metrics.update(metrics.get_env_metrics())
@@ -288,8 +256,6 @@ def main(argv: Optional[Sequence[str]] = None):
                     val_dataloader,
                     model,
                     device,
-                    filter_item_on_train=True,
-                    profiler=val_prof,
                 )
 
                 val_metrics.update(metrics.get_env_metrics())
@@ -307,6 +273,18 @@ def main(argv: Optional[Sequence[str]] = None):
                         "val_metrics": val_metrics,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
+
+                if is_pep:
+                    sparsity, n_params = model.embedding.get_sparsity(True)
+                    logger.log_metric("sparsity", sparsity, epoch_idx)
+                    logger.info(f"{n_params=}")
+                    path = os.path.join(
+                        model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
+                    )
+                    if n_params <= TARGET_SPARSITY and not os.path.exists(path):
+                        logger.info(f"save {TARGET_SPARSITY}")
+                        torch.save(model.embedding.state_dict(), path)
+
     except KeyboardInterrupt:
         pass
 

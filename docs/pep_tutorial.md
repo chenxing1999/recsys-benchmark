@@ -1,3 +1,5 @@
+# LightGCN
+
 1. Search for best hyperparameters for NDCG based on target sparsity
 
 (
@@ -8,7 +10,7 @@ provide good baseline to prune bad result.
 ).
 
 ```shell
-python scripts/train_lightgcn_pep.py configs/pep_debug_config.yaml
+python scripts/lightgcn/train_lightgcn_pep.py configs/lightgcn/pep_debug_config.yaml
 ```
 
 2. Retrain the model by edit `config["pep_config"]["is_retrain"]` to True

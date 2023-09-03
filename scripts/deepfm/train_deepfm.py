@@ -1,16 +1,19 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import torch
 import yaml
 from torch.utils.data import DataLoader
 
 from src import metrics
-from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
+from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
-from src.models import get_graph_model
-from src.trainer.lightgcn import train_epoch, validate_epoch
+from src.models.deepfm import DeepFM
+from src.trainer.deepfm import train_epoch, validate_epoch
+from src.utils import set_seed
+
+set_seed(2023)
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -50,49 +53,79 @@ def init_profiler(config: Dict):
     return prof
 
 
+def get_dataset_cls(loader_config) -> str:
+    num_workers = loader_config.get("num_workers", 0)
+    shuffle = loader_config.get("shuffle", False)
+
+    if num_workers == 0 and not shuffle:
+        return "iter"
+    else:
+        return "normal"
+
+
+NAME_TO_DATASET_CLS = {
+    "iter": CriteoIterDataset,
+    "normal": CriteoDataset,
+}
+
+
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
 
     # Loading train dataset
     logger.info("Load train dataset...")
+
     train_dataloader_config = config["train_dataloader"]
+    train_dataset_cls = get_dataset_cls(train_dataloader_config)
+    logger.info(f"Train dataset type: {train_dataset_cls}")
+
     train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset = CFGraphDataset(**train_dataset_config)
+    train_dataset: Union[CriteoIterDataset, CriteoDataset]
+    train_dataset_cls = NAME_TO_DATASET_CLS[train_dataset_cls]
+    train_dataset = train_dataset_cls(**train_dataset_config)
+
     logger.info("Successfully load train dataset")
     train_dataset.describe()
     train_dataloader = DataLoader(
         train_dataset,
         train_dataloader_config["batch_size"],
-        shuffle=True,
+        shuffle=train_dataloader_config.get("shuffle", False),
         num_workers=train_dataloader_config["num_workers"],
     )
 
+    # Loading val dataset
     if config["run_test"]:
         val_dataloader_config = config["test_dataloader"]
     else:
         val_dataloader_config = config["val_dataloader"]
 
     logger.info("Load val dataset...")
-    val_dataset = TestCFGraphDataset(val_dataloader_config["dataset"]["path"])
+    val_dataset_config = val_dataloader_config["dataset"]
+
+    # TODO: Refactor later
+    val_dataset_cls = get_dataset_cls(val_dataloader_config)
+    logger.info(f"Val dataset type: {val_dataset_cls}")
+    val_dataset_cls = NAME_TO_DATASET_CLS[val_dataset_cls]
+    train_info_to_val = train_dataset.pop_info()
+
+    val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
+    val_dataset.pop_info()
+
     val_dataloader = DataLoader(
         val_dataset,
         val_dataloader_config["batch_size"],
         shuffle=False,
-        collate_fn=TestCFGraphDataset.collate_fn,
         num_workers=val_dataloader_config["num_workers"],
     )
+
     logger.info("Successfully load val dataset")
 
     checkpoint_folder = os.path.dirname(config["checkpoint_path"])
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = get_graph_model(
-        train_dataset.num_users,
-        train_dataset.num_items,
-        model_config,
-    )
+    model = DeepFM(train_dataset.field_dims, **model_config)
 
     if torch.cuda.is_available():
         device = "cuda"
@@ -103,7 +136,7 @@ def main(argv: Optional[Sequence[str]] = None):
         checkpoint = torch.load(config["checkpoint_path"])
         model.load_state_dict(checkpoint["state_dict"])
 
-        val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
+        val_metrics = validate_epoch(val_dataloader, model, device)
         for key, value in val_metrics.items():
             logger.info(f"{key} - {value:.4f}")
 
@@ -112,6 +145,7 @@ def main(argv: Optional[Sequence[str]] = None):
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config["learning_rate"],
+        weight_decay=config["weight_decay"],
     )
 
     num_params = 0
@@ -128,59 +162,48 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
-    best_ndcg = 0
+    best_auc = 0
     num_epochs = config["num_epochs"]
-
-    early_stop_count = 0
-    early_stop_config = config.get("early_stop_patience", 0)
-    warmup = config.get("warmup", 0)
-    for epoch_idx in range(num_epochs):
-        logger.log_metric("Epoch", epoch_idx, epoch_idx)
-        train_metrics = train_epoch(
-            train_dataloader,
-            model,
-            optimizer,
-            device,
-            config["log_step"],
-            config["weight_decay"],
-            train_prof,
-            info_nce_weight=config["info_nce_weight"],
-        )
-
-        train_metrics.update(metrics.get_env_metrics())
-        for metric, value in train_metrics.items():
-            logger.log_metric(f"train/{metric}", value, epoch_idx)
-
-        if (epoch_idx + 1) % config["validate_step"] == 0:
-            val_metrics = validate_epoch(
-                train_dataset,
-                val_dataloader,
+    try:
+        for epoch_idx in range(num_epochs):
+            logger.log_metric("Epoch", epoch_idx, epoch_idx)
+            train_metrics = train_epoch(
+                train_dataloader,
                 model,
+                optimizer,
                 device,
-                filter_item_on_train=True,
-                profiler=val_prof,
+                config["log_step"],
+                train_prof,
             )
 
-            val_metrics.update(metrics.get_env_metrics())
+            train_metrics.update(metrics.get_env_metrics())
+            for metric, value in train_metrics.items():
+                logger.log_metric(f"train/{metric}", value, epoch_idx)
 
-            for key, value in val_metrics.items():
-                logger.log_metric(f"val/{key}", value, epoch_idx)
+            if (epoch_idx + 1) % config["validate_step"] == 0:
+                val_metrics = validate_epoch(
+                    val_dataloader,
+                    model,
+                    device,
+                )
 
-            if best_ndcg < val_metrics["ndcg"]:
-                logger.info("New best, saving model...")
-                best_ndcg = val_metrics["ndcg"]
+                val_metrics.update(metrics.get_env_metrics())
 
-                checkpoint = {
-                    "state_dict": model.state_dict(),
-                    "model_config": model_config,
-                    "val_metrics": val_metrics,
-                }
-                torch.save(checkpoint, config["checkpoint_path"])
-            elif warmup <= epoch_idx:
-                early_stop_count += 1
+                for key, value in val_metrics.items():
+                    logger.log_metric(f"val/{key}", value, epoch_idx)
 
-                if early_stop_config and early_stop_count > early_stop_config:
-                    return
+                if best_auc < val_metrics["auc"]:
+                    logger.info("New best, saving model...")
+                    best_auc = val_metrics["auc"]
+
+                    checkpoint = {
+                        "state_dict": model.state_dict(),
+                        "model_config": model_config,
+                        "val_metrics": val_metrics,
+                    }
+                    torch.save(checkpoint, config["checkpoint_path"])
+    except KeyboardInterrupt:
+        pass
 
     if config["enable_profile"]:
         train_prof.stop()
