@@ -196,6 +196,7 @@ class RetrainPepEmbedding(IEmbedding):
         # mask will be moved to correct device
         self.mask = nn.Parameter((torch.abs(weight) - torch.sigmoid(s)) > 0, False)
         nnz = self.mask.sum()
+        self._nnz = nnz
         self.sparsity = 1 - (nnz / torch.prod(torch.tensor(self.mask.size()))).item()
         self._mode = mode
 
@@ -211,5 +212,7 @@ class RetrainPepEmbedding(IEmbedding):
             xv = F.embedding(x, sparse_emb)
         return xv
 
-    def get_sparsity(self):
+    def get_sparsity(self, get_n_params=False):
+        if get_n_params:
+            return self.sparsity, self._nnz
         return self.sparsity

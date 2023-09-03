@@ -2,6 +2,7 @@ import argparse
 import os
 from typing import Dict, Optional, Sequence, Union
 
+import loguru
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -10,11 +11,11 @@ from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
-from src.trainer.deepfm import *
 from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
+TARGET_SPARSITY = 1300
 
 
 def train_epoch(
@@ -61,16 +62,15 @@ def train_epoch(
                 if value > 0:
                     avg = value / (idx + 1)
                     msg += f" - {metric}: {avg:.4}"
+            if n_params <= TARGET_SPARSITY:
+                path = os.path.join(
+                    model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
+                )
+                loguru.logger.info(f"Saved {TARGET_SPARSITY}")
+                if not os.path.exists(path):
+                    torch.save(model.embedding.state_dict(), path)
 
             loguru.logger.info(msg)
-
-        if idx % 100 == 0:
-            with torch.no_grad():
-                sparsity, n_params = model.embedding.get_sparsity(True)
-            if n_params <= 1300:
-                path = os.path.join(model.embedding.checkpoint_weight_dir, f"1300.pth")
-                torch.save(model.embedding.state_dict(), path)
-                print("Saved target n_params model")
 
         if profiler:
             profiler.step()
@@ -279,9 +279,10 @@ def main(argv: Optional[Sequence[str]] = None):
                     logger.log_metric("sparsity", sparsity, epoch_idx)
                     logger.info(f"{n_params=}")
                     path = os.path.join(
-                        model.embedding.checkpoint_weight_dir, f"1986.pth"
+                        model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
                     )
-                    if n_params <= 1986 and not os.path.exists(path):
+                    if n_params <= TARGET_SPARSITY and not os.path.exists(path):
+                        logger.info(f"save {TARGET_SPARSITY}")
                         torch.save(model.embedding.state_dict(), path)
 
     except KeyboardInterrupt:
