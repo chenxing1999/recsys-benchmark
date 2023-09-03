@@ -79,6 +79,9 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
         self.field_dims = [
             len(self.feat_mappers[i + 1]) + 1 for i in range(self.NUM_FEATS)
         ]
+        field_dims = torch.tensor(self.field_dims)
+        field_dims = torch.cat([torch.tensor([0], dtype=torch.long), field_dims])
+        self.offsets = torch.cumsum(field_dims[:-1], 0)
 
         self.path = path
 
@@ -106,7 +109,9 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
             for i in range(self.NUM_INT_FEATS + 1, self.NUM_FEATS + 1):
                 feats[i - 1] = feat_mapper[i][line[i]]
 
-            yield torch.tensor(feats), label
+            feats = torch.tensor(feats)
+            feats = feats + self.offsets
+            yield feats, label
 
     def pop_info(self):
         # TODO: Refactor this
