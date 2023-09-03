@@ -1,10 +1,12 @@
-import torch
-from typing import Dict
-import numpy as np
 import random
+from typing import Dict
+
+import numpy as np
+import torch
+
 
 def prune(state: Dict[str, torch.Tensor], p: float):
-    """ Prune state dict based on L2 norm to p sparsity """
+    """Prune state dict based on L2 norm to p sparsity"""
     for name, weight in state.items():
         assert len(weight.shape) == 2
         h = weight.shape[1]
@@ -18,7 +20,6 @@ def prune(state: Dict[str, torch.Tensor], p: float):
         state[name] = weight
 
     return state
-
 
 
 def set_seed(seed):
