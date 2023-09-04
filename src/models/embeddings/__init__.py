@@ -1,9 +1,11 @@
 import copy
 from typing import Dict, List, Optional, Union
 
+from loguru import logger
+
 from .base import IEmbedding, VanillaEmbedding
 from .dh_embedding import DHEmbedding
-from .lightgcn_opt_embed import OptEmbed, OptEmbedMaskD
+from .lightgcn_opt_embed import OptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 
@@ -13,7 +15,7 @@ NAME_TO_CLS = {
     "dhe": DHEmbedding,
     "pep": PepEmbeeding,
     "pep_retrain": RetrainPepEmbedding,
-    "optembed_d": OptEmbedMaskD,
+    "optembed_d": OptEmbed,  # will only use mask D
     "optembed": OptEmbed,
 }
 
@@ -44,6 +46,10 @@ def get_embedding(
     else:
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
+        if name == "optembed_d":
+            embedding_config["t_init"] = None
+            logger.debug("OptEmbed Mask E is disabled before creating")
+
         cls = name_to_cls[name]
         emb = cls(field_dims, hidden_size, mode=mode, **embedding_config)
 

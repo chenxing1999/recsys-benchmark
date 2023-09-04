@@ -214,7 +214,6 @@ def main(argv: Optional[Sequence[str]] = None):
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
     )
-    torch.optim.lr_scheduler.ExponentialLR(optimizer, 1.0)
 
     num_params = 0
     for p in model.parameters():

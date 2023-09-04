@@ -56,34 +56,25 @@ class IOptEmbed(IEmbedding):
         return 0
 
 
-class OptEmbed(IOptEmbed):
+class _MaskEmbeddingModule(nn.Module):
+    """Wrapper to apply Mask embedding"""
+
     def __init__(
         self,
-        field_dims: Union[List[int], int],
-        hidden_size: int,
-        mode: Optional[str] = None,
+        field_dims: torch.LongTensor,
         t_init: float = 0,
         mode_threshold_e="field",
         norm=1,
     ):
         super().__init__()
-        if isinstance(field_dims, int):
-            field_dims = [field_dims]
-
-        self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
-        self._num_item = self._field_dims.sum()
-        self._num_field = len(field_dims)
-
-        self._hidden_size = hidden_size
         self.s = BinaryStep.apply
-
-        self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
-        nn.init.xavier_uniform_(self._weight)
-
-        self._full_mask_d = get_mask(hidden_size)
-
         assert mode_threshold_e in ["feature", "field"]
         self.mode_threshold_e = mode_threshold_e
+
+        self.register_buffer("_field_dims", field_dims)
+
+        self._num_item = self._field_dims.sum()
+        self._num_field = len(field_dims)
 
         if self.mode_threshold_e == "feature":
             t_size = self._num_item
@@ -92,19 +83,13 @@ class OptEmbed(IOptEmbed):
 
         self._t_param = nn.Parameter(torch.empty(t_size))
         nn.init.constant_(self._t_param, t_init)
-
-        self._cur_weight = None
         self._norm = norm
-        self._mode = mode
-
-    def get_l_s(self):
-        return torch.exp(-self._t_param).sum()
 
     def _transform_t_to_feat(self):
+        """Transform vector t from current format to num feature-dimension"""
         if self.mode_threshold_e == "feature":
             return self._t_param
 
-        self._field_dims = self._field_dims.to(self._t_param.device)
         return torch.repeat_interleave(
             self._t_param,
             self._field_dims,
@@ -112,22 +97,123 @@ class OptEmbed(IOptEmbed):
             output_size=self._num_item,
         )
 
+    def forward(self, weight):
+        t = self._transform_t_to_feat()
+        mask_e = self.s(torch.norm(weight, self._norm) - t)
+        mask_e = mask_e.unsqueeze(-1)
+        emb = weight * mask_e
+        return emb
+
+
+class OptEmbed(IOptEmbed):
+    """Opt Embed wrapper for paper
+    https://arxiv.org/abs/2208.04482
+
+    Note: In this implementation, I use a cache mechanism.
+
+    If you call `get_weight` or `forward`:
+        the cache (weight with masked value)
+            will be created
+
+    if you call `backward`:
+        the cache will be deleted
+        This is because the change of masked value
+    """
+
+    def __init__(
+        self,
+        field_dims: Union[List[int], int],
+        hidden_size: int,
+        mode: Optional[str] = None,
+        t_init: Optional[float] = 0,
+        mode_threshold_e="field",
+        norm=1,
+        target_sparsity: Optional[float] = None,
+    ):
+        """
+        Args:
+            field_dims: List of dimension size
+            hidden_size: size of vector output
+            mode in ["sum", "mean", "max", None]. Reduction method
+                see torch.nn.EmbeddingBag for more information
+
+            t_init: Initialize value of t vector
+                if None, remove mask embedding
+
+            mode_threshold_e: Literal["field","feature"]
+                if mode is "field", value t of same field will be the same
+            norm: norm = 1 --> L1, norm = 2 --> L2
+
+            target_sparsity:
+                 determined sampling logic.
+                 If target_sparsity is None, use original sampling logic
+        """
+        super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        assert mode in ["sum", "mean", "max", None]
+        assert mode_threshold_e in ["field", "feature"]
+
+        self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
+        self._num_item = self._field_dims.sum()
+        self._num_field = len(field_dims)
+
+        self._hidden_size = hidden_size
+
+        self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
+        self._cur_weight = None
+        nn.init.xavier_uniform_(self._weight)
+
+        # When backward -> weight update
+        # value of cur weight should be changing
+        self._handle = self.register_full_backward_hook(_delete_cache)
+        self._mode = mode
+
+        # Mask E related logic
+        self._t_init = t_init
+        if t_init is None:
+            self._mask_e_module = nn.Identity()
+        else:
+            self._mask_e_module = _MaskEmbeddingModule(
+                self._field_dims,
+                t_init,
+                mode_threshold_e,
+                norm,
+            )
+
+        # Mask D
+        # use buffer so that when move model to device,
+        # _full_mask_d will get assign correct device
+        _full_mask_d = get_mask(hidden_size)
+        self.register_buffer("_full_mask_d", _full_mask_d)
+
+        self._target_sparsity = target_sparsity
+        self._naive = False
+
+    def get_l_s(self):
+        if self._t_init is None:
+            return 0
+        return torch.exp(-self._mask_e_module._t_param).sum()
+
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):
         device = self._weight.data.device
-        self._full_mask_d = self._full_mask_d.to(device)
 
         # Apply mask_e
-        t = self._transform_t_to_feat()
-        mask_e = self.s(torch.norm(self._weight, self._norm) - t)
-        mask_e = mask_e.unsqueeze(-1)
-        emb = self._weight * mask_e
+        emb = self._mask_e_module(self._weight)
 
         if self.training:
             if mask_d is None:
-                indices = torch.randint(
-                    0, self._hidden_size, (self._num_item,), device=device
+                indices = _sampling_by_weight(
+                    self._target_sparsity,
+                    self._hidden_size,
+                    self._num_item,
+                    self._naive,
+                    device,
                 )
                 mask_d = F.embedding(indices, self._full_mask_d)
+            elif isinstance(mask_d, torch.LongTensor):
+                mask_d = F.embedding(mask_d, self._full_mask_d)
 
             self._cur_weight = emb * mask_d
         else:
@@ -143,73 +229,16 @@ class OptEmbed(IOptEmbed):
         return self._cur_weight
 
     def forward(self, x, mask_d=None):
-        if self._cur_weight is None:
-            self.get_weight(mask_d)
-
-        mode = self._mode
-        if mode is None:
-            return F.embedding(x, self._cur_weight)
-        else:
-            return F.embedding_bag(x, self._cur_weight, mode=mode)
-
-
-class OptEmbedMaskD(IOptEmbed):
-    """Wrapper to calculate E * mask_d in OptEmbed"""
-
-    def __init__(
-        self,
-        field_dims: Union[List[int], int],
-        hidden_size,
-        target_sparsity=None,
-        mode=None,
-    ):
-        super().__init__()
-        if isinstance(field_dims, int):
-            field_dims = [field_dims]
-        num_item = sum(field_dims)
-        self._num_item = num_item
-        self._hidden_size = hidden_size
-        self._weight = nn.Parameter(torch.empty((num_item, hidden_size)))
-        nn.init.xavier_uniform_(self._weight)
-
-        self._full_mask = get_mask(hidden_size)
-
-        self._cur_weight = None
-        self._mode = mode
-        self._target_sparsity = target_sparsity
-        self._naive = False
-
-    def get_weight(self, mask_d: Optional[torch.Tensor] = None):
-        device = self._weight.data.device
-        self._full_mask = self._full_mask.to(device)
-
-        if self.training:
-            if mask_d is None:
-                indices = _sampling_by_weight(
-                    self._target_sparsity,
-                    self._hidden_size,
-                    self._num_item,
-                    self._naive,
-                ).to(device)
-                mask_d = F.embedding(indices, self._full_mask)
-
-            self._cur_weight = self._weight * mask_d
-        else:
-            if mask_d is None:
-                self._cur_weight = self._weight.data
-            else:
-                if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
-                    mask_d = mask_d.to(device)
-                    mask_d = F.embedding(mask_d, self._full_mask)
-                mask_d = mask_d.to(self._weight)
-                self._cur_weight = self._weight * mask_d
-
-        return self._cur_weight
-
-    def get_l_s(self):
-        return 0
-
-    def forward(self, x, mask_d=None):
+        """
+        Args:
+            x: (torch.LongTensor B x Num field) indices of feature after offsets
+            mask_d:
+                if ([torch.LongTensor], shape: Num feature)
+                    mask_d[i] + 1 = dimension used for feature i
+                if ([torch.BoolTensor], shape: Num feature x Dimension)
+                    directly used as a mask
+        """
+        # Creating self._cur_weight
         if self._cur_weight is None:
             self.get_weight(mask_d)
 
@@ -548,18 +577,24 @@ def _get_linear_hidden(target_sparsity, hidden_size):
     return hidden_size
 
 
-def _sampling_by_weight(target_sparsity, hidden_size, num_item, navie=True):
+def _sampling_by_weight(
+    target_sparsity, hidden_size, num_item, navie=True, device=None
+):
     if target_sparsity is None:
-        return torch.randint(0, hidden_size, (num_item,))
+        return torch.randint(0, hidden_size, (num_item,), device=device)
 
     if navie:
         hidden = _get_linear_hidden(target_sparsity, hidden_size)
-        return torch.randint(0, hidden, (num_item,))
+        return torch.randint(0, hidden, (num_item,), device=device)
 
     alpha = _find_alpha(target_sparsity, hidden_size)
     weight = _generate_weight(alpha, hidden_size)
     sampler = torch.utils.data.WeightedRandomSampler(weight, num_item)
-    return torch.tensor(list(sampler))
+    return torch.tensor(list(sampler), device=device)
+
+
+def _delete_cache(module: OptEmbed, grad_input, grad_output):
+    module._cur_weight = None
 
 
 # Retrain

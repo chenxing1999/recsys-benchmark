@@ -20,7 +20,6 @@ def train_epoch(
     model.train()
     model.to(device)
 
-    value = model.embedding.get_sparsity()
     loss_dict = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
