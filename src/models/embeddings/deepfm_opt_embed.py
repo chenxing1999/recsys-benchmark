@@ -1,3 +1,4 @@
+"""Original implementation for DeepFM OptEmbedding"""
 import random
 from collections import namedtuple
 from functools import lru_cache, partial

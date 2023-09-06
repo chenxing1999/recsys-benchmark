@@ -12,21 +12,22 @@ model:
 train_dataloader:
   dataset:
     path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo_sample/train.bin
+    cache_path: dataset/ctr/criteo/criteo-common-split/train.bin
   num_workers: 8
   batch_size: 2048
+  shuffle: True
 
 val_dataloader:
   dataset:
     path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo_sample/val.bin
+    cache_path: dataset/ctr/criteo/criteo-common-split/val.bin
   batch_size: 2048
   num_workers: 8
 
 test_dataloader:
   dataset:
     path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo_sample/test.bin
+    cache_path: dataset/ctr/criteo/criteo-common-split/test.bin
   batch_size: 2048
   num_workers: 8
 
@@ -75,4 +76,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: original-torchfm-correct-weight_decay
+  log_name: opt-embed

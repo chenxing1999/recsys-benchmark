@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 import loguru
 import torch
@@ -11,24 +11,29 @@ from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
-from src.models.embeddings.lightgcn_opt_embed import IOptEmbed, OptEmbed
+from src.models.embeddings.deepfm_opt_embed import IOptEmbed, OptEmbed
 from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
-TARGET_SPARSITY = 1300
 
 
 def train_epoch(
     dataloader: DataLoader,
     model: DeepFM,
-    optimizer,
+    optimizers: List[torch.optim.Optimizer],
     device="cuda",
     log_step=10,
     profiler=None,
     clip_grad=0,
     alpha=0,
 ) -> Dict[str, float]:
+    """Custom training logic for DeepFM OptEmbed
+
+    Customization have been done:
+        - Add `alpha` (weight for l_s)
+        - Use multiple optimizers instead of one.
+    """
     model.train()
     model.to(device)
 
@@ -51,11 +56,13 @@ def train_epoch(
         loss_s = model.embedding.get_l_s()
         loss = loss + alpha * loss_s
 
-        optimizer.zero_grad()
+        for optimizer in optimizers:
+            optimizer.zero_grad()
         loss.backward()
         if clip_grad:
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        optimizer.step()
+        for optimizer in optimizers:
+            optimizer.step()
 
         if is_opt_embed:
             loss_dict["loss_s"] += loss_s.item()
@@ -65,6 +72,9 @@ def train_epoch(
         # Logging
         if log_step and idx % log_step == 0:
             msg = f"Idx: {idx}"
+            sparsity, n_params = model.embedding.get_sparsity(True)
+
+            msg += f" - {sparsity=:.4f} - {n_params=}"
 
             for metric, value in loss_dict.items():
                 if value > 0:
@@ -72,6 +82,21 @@ def train_epoch(
                     msg += f" - {metric}: {avg:.4}"
 
             loguru.logger.info(msg)
+
+            t_param = model.embedding._mask_e_module._t_param
+            print(
+                f"Threshold --- "
+                f"Max: {t_param.max()}"
+                f"- Min: {t_param.min()}"
+                f"- Mean: {t_param.mean()}"
+            )
+            norm = model.embedding._weight.norm(1, dim=1)
+            print(
+                f"Norm --- "
+                f"Max: {norm.max()}"
+                f"- Min: {norm.min()}"
+                f"- Mean: {norm.mean()}"
+            )
 
         if profiler:
             profiler.step()
@@ -194,7 +219,6 @@ def main(argv: Optional[Sequence[str]] = None):
 
     model_config = config["model"]
     model = DeepFM(train_dataset.field_dims, **model_config)
-    assert isinstance(model.embedding, IOptEmbed), "Model embedding need to OptEmbed"
 
     if torch.cuda.is_available():
         device = "cuda"
@@ -219,13 +243,18 @@ def main(argv: Optional[Sequence[str]] = None):
         else:
             para_dict["default"].append(p)
 
-    optimizer = torch.optim.Adam(
+    optimizer_threshold = torch.optim.SGD(
         [
             {
                 "params": para_dict["t_param"],
                 "lr": config["opt_embed"]["t_param_lr"],
                 "weight_decay": 0,
             },
+        ]
+    )
+
+    optimizer = torch.optim.Adam(
+        [
             {
                 "params": para_dict["default"],
                 "lr": config["learning_rate"],
@@ -233,6 +262,8 @@ def main(argv: Optional[Sequence[str]] = None):
             },
         ]
     )
+
+    optimizers = [optimizer, optimizer_threshold]
 
     num_params = 0
     for p in model.parameters():
@@ -250,18 +281,16 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_auc = 0
     num_epochs = config["num_epochs"]
-    clip_grad = 100
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
             train_metrics = train_epoch(
                 train_dataloader,
                 model,
-                optimizer,
+                optimizers,
                 device,
                 config["log_step"],
                 train_prof,
-                clip_grad,
                 alpha=config["opt_embed"]["alpha"],
             )
 
@@ -277,6 +306,10 @@ def main(argv: Optional[Sequence[str]] = None):
                 )
 
                 val_metrics.update(metrics.get_env_metrics())
+                sparsity, n_params = model.embedding.get_sparsity(True)
+
+                logger.log_metric("sparsity", sparsity, epoch_idx)
+                logger.info(f"{n_params=}")
 
                 for key, value in val_metrics.items():
                     logger.log_metric(f"val/{key}", value, epoch_idx)

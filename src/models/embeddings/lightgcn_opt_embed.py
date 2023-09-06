@@ -99,7 +99,7 @@ class _MaskEmbeddingModule(nn.Module):
 
     def forward(self, weight):
         t = self._transform_t_to_feat()
-        mask_e = self.s(torch.norm(weight, self._norm) - t)
+        mask_e = self.s(torch.norm(weight, self._norm, dim=1) - t)
         mask_e = mask_e.unsqueeze(-1)
         emb = weight * mask_e
         return emb
@@ -127,6 +127,7 @@ class OptEmbed(IOptEmbed):
         mode: Optional[str] = None,
         t_init: Optional[float] = 0,
         mode_threshold_e="field",
+        mode_threshold_d="field",
         norm=1,
         target_sparsity: Optional[float] = None,
     ):
@@ -141,7 +142,11 @@ class OptEmbed(IOptEmbed):
                 if None, remove mask embedding
 
             mode_threshold_e: Literal["field","feature"]
-                if mode is "field", value t of same field will be the same
+                if mode="field", value t of feature in the same field will be the same
+
+            mode_threshold_d: Literal["field","feature"]
+                if mode="field", dimension of feature in the same field will be the same
+
             norm: norm = 1 --> L1, norm = 2 --> L2
 
             target_sparsity:
@@ -154,6 +159,7 @@ class OptEmbed(IOptEmbed):
 
         assert mode in ["sum", "mean", "max", None]
         assert mode_threshold_e in ["field", "feature"]
+        assert mode_threshold_d in ["field", "feature"]
 
         self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
         self._num_item = self._field_dims.sum()
@@ -190,6 +196,7 @@ class OptEmbed(IOptEmbed):
 
         self._target_sparsity = target_sparsity
         self._naive = False
+        self._mode_d = mode_threshold_d
 
     def get_l_s(self):
         if self._t_init is None:
@@ -202,29 +209,51 @@ class OptEmbed(IOptEmbed):
         # Apply mask_e
         emb = self._mask_e_module(self._weight)
 
+        if not self.training and mask_d is None:
+            self._cur_weight = emb
+            return self._cur_weight
+
         if self.training:
             if mask_d is None:
-                indices = _sampling_by_weight(
-                    self._target_sparsity,
-                    self._hidden_size,
-                    self._num_item,
-                    self._naive,
-                    device,
-                )
+                # Sampling mask d
+                if self._mode_d == "feature":
+                    indices = _sampling_by_weight(
+                        self._target_sparsity,
+                        self._hidden_size,
+                        self._num_item,
+                        self._naive,
+                        device,
+                    )
+                elif self._mode_d == "field":
+                    # Only support uniform for now
+                    indices = torch.randint(0, self._hidden_size, (self._num_field,))
+                    indices = torch.repeat_interleave(
+                        indices,
+                        self._field_dims,
+                        dim=0,
+                        output_size=self._num_item,
+                    ).to(device)
+
                 mask_d = F.embedding(indices, self._full_mask_d)
             elif isinstance(mask_d, torch.LongTensor):
                 mask_d = F.embedding(mask_d, self._full_mask_d)
 
             self._cur_weight = emb * mask_d
         else:
-            if mask_d is None:
-                self._cur_weight = emb
-            else:
-                if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
-                    mask_d = mask_d.to(device)
-                    mask_d = F.embedding(mask_d, self._full_mask_d)
-                mask_d = mask_d.to(self._weight)
-                self._cur_weight = emb * mask_d
+            if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
+                mask_d = mask_d.to(device)
+                field_dims = self._field_dims.to(device)
+                if self._mode_d == "field":
+                    mask_d = torch.repeat_interleave(
+                        mask_d,
+                        field_dims,
+                        dim=0,
+                        output_size=self._num_item,
+                    )
+
+                mask_d = F.embedding(mask_d, self._full_mask_d)
+            mask_d = mask_d.to(self._weight)
+            self._cur_weight = emb * mask_d
 
         return self._cur_weight
 
@@ -247,6 +276,17 @@ class OptEmbed(IOptEmbed):
             return F.embedding(x, self._cur_weight)
         else:
             return F.embedding_bag(x, self._cur_weight, mode=mode)
+
+    def get_sparsity(self, get_n_params=False):
+        # if self._cur_weight is None:
+        #     self.get_weight()
+        emb = self._mask_e_module(self._weight)
+        nnz = torch.nonzero(emb).size(0)
+        nnz = int(nnz)
+        sparsity = 1 - nnz / (emb.shape[0] * emb.shape[1])
+        if get_n_params:
+            return sparsity, nnz
+        return sparsity
 
 
 # Evo
