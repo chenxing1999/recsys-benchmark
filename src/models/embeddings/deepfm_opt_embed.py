@@ -1,6 +1,7 @@
+"""Original implementation for DeepFM OptEmbedding"""
 import random
 from collections import namedtuple
-from functools import partial
+from functools import lru_cache, partial
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -70,6 +71,11 @@ class OptEmbed(IOptEmbed):
             target_sparsity:
                  determined sampling logic.
                  If target_sparsity is None, use original sampling logic
+
+        Note: main difference of DeepFM OptEmbed and LightGCN OptEmbed
+            - DeepFM will generate mask dimension with shape Batch x Num field
+            - LightGCN will only generate mask dimension for all embedding
+                If apply LightGCN forward, the mask dimension will be Num field.
         """
         super().__init__()
         if isinstance(field_dims, int):
@@ -80,6 +86,11 @@ class OptEmbed(IOptEmbed):
         assert mode_threshold_d in ["field", "feature"]
 
         self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
+
+        start_field_idx = torch.concat([torch.tensor([0], dtype=int), self._field_dims])
+
+        # self._offsets: 0, 2, 5
+        self._offsets = torch.cumsum(start_field_idx, 0)[:-1]
         self._num_item = self._field_dims.sum()
         self._num_field = len(field_dims)
 
@@ -184,16 +195,37 @@ class OptEmbed(IOptEmbed):
                     mask_d[i] + 1 = dimension used for feature i
                 if ([torch.BoolTensor], shape: Num feature x Dimension)
                     directly used as a mask
+
         """
-        # Creating self._cur_weight
+        device = self._weight.data.device
+        b = x.shape[0]
+        mode = self._mode
+
+        if self.training:
+            x = F.embedding(x, self._weight)
+            emb = self._mask_e_module(x)
+            mask_d = torch.randint(
+                0, self._hidden_size, size=(b, self._num_field), device=device
+            )
+            mask_d = F.embedding(mask_d, self._full_mask_d)
+            emb = mask_d * emb
+            if mode is None:
+                return emb
+            elif mode == "sum":
+                return emb.sum(1)
+            elif mode == "max":
+                return emb.max(1)
+            elif mode == "mean":
+                return emb.mean(1)
+
+        # Evaluation forward logic
         if self._cur_weight is None:
             self.get_weight(mask_d)
 
-        mode = self._mode
-        if mode is None:
+        if self._mode is None:
             return F.embedding(x, self._cur_weight)
         else:
-            return F.embedding_bag(x, self._cur_weight, mode=mode)
+            return F.embedding_bag(x, self._cur_weight, mode=self._mode)
 
     def get_sparsity(self, get_n_params=False):
         emb = self._mask_e_module(self._weight)
@@ -204,43 +236,81 @@ class OptEmbed(IOptEmbed):
             return sparsity, nnz
         return sparsity
 
+    @lru_cache(1)
+    def get_submask(self) -> torch.LongTensor:
+        """Return submask
+            submask[i] is num feature used that mask_d[i] represent
+        so num_element with a mask d = (submask * mask_d).sum()
+
+        submask.shape = num field if mode_d is field
+                      = num feature if mode_d is feature
+        """
+        if isinstance(self._mask_e_module, nn.Identity):
+            if self._mode_d == "field":
+                return self._field_dims
+            else:
+                return torch.ones(self._num_item, dtype=int)
+
+        # apply mask e to weight
+        emb = self._mask_e_module(self._weight)
+
+        # mask_e[i] = 1 if still use feature i, else 0
+        # mask_e shape=num_feature
+        mask_e = (emb.norm(1, 1) > 0).to(int)
+        if self._mode_d == "feature":
+            return mask_e.cpu()
+
+        # num_e[i] = num element used until index i (shape=num_feature + 1)
+        # (num_e[0] = 0 and num_e[-1]=num feature left after apply mask e)
+        num_e = mask_e.cumsum(0).cpu()
+        num_e = torch.cat([torch.tensor([0], dtype=int), num_e])
+
+        start_idx = torch.cat([torch.tensor([0], dtype=int), self._field_dims])
+        offsets = start_idx.cumsum(0)
+
+        return num_e[offsets[1:]] - num_e[offsets[:-1]]
+
 
 # Evo
-Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask"])
+# `extra` used to calculate sparsity
+Candidate = DeepFMCandidate = namedtuple("Candidate", ["save_mask", "extra"])
 
 
-def _generate_lightgcn_candidate(
-    num_user, num_item, hidden_size, target_sparsity=None, naive=False
-):
-    candidate = LightGCNCandidate(
-        user_mask=_sampling_by_weight(
-            target_sparsity,
-            hidden_size,
-            num_user,
-            naive,
-        ),
-        item_mask=_sampling_by_weight(
-            target_sparsity,
-            hidden_size,
-            num_item,
-            naive,
-        ),
+def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
+    hidden_size = emb._hidden_size
+    mode_threshold_d = emb._mode_d
+
+    if mode_threshold_d == "field":
+        size = emb._num_field
+    elif mode_threshold_d == "feature":
+        size = emb._num_item
+    else:
+        raise NotImplementedError()
+
+    with torch.no_grad():
+        sub_mask = emb.get_submask()
+
+    n_max = emb._num_item * hidden_size
+
+    extra = (sub_mask, n_max)
+    mask = _sampling_by_weight(
+        target_sparsity,
+        hidden_size,
+        size,
+        naive,
+    )
+
+    # Get true field dims per fields
+    candidate = DeepFMCandidate(
+        save_mask=mask,
+        extra=extra,
     )
 
     if target_sparsity is None:
         return candidate
-    cur_sparsity = _get_sparsity(candidate, hidden_size)
-    step = 1.05
-    while cur_sparsity < target_sparsity:
-        candidate = LightGCNCandidate(
-            user_mask=_sampling_by_weight(
-                target_sparsity * step, hidden_size, num_user
-            ),
-            item_mask=_sampling_by_weight(
-                target_sparsity * step, hidden_size, num_item
-            ),
-        )
-        cur_sparsity = _get_sparsity(candidate, hidden_size)
+    _get_sparsity(candidate, hidden_size)
+    # while cur_sparsity < target_sparsity:
+    #     cur_sparsity = _get_sparsity(candidate, hidden_size)
     return candidate
 
 
@@ -248,36 +318,28 @@ def _validate_candidate(
     model,
     candidate: Candidate,
     val_loader,
-    train_dataset,
 ):
     # this import here because it kind of weird for OptEmbed
     # to be depends on trainer
 
-    from src.trainer.lightgcn import validate_epoch
+    from src.trainer.deepfm import validate_epoch
 
     # hook
-    model.item_emb_table.get_weight = partial(
-        model.item_emb_table.get_weight,
-        mask_d=candidate.item_mask,
-    )
-    model.user_emb_table.get_weight = partial(
-        model.user_emb_table.get_weight,
-        mask_d=candidate.user_mask,
+    model.embedding.forward = partial(
+        model.embedding.forward,
+        mask_d=candidate.save_mask,
     )
     # validate
-    result = validate_epoch(train_dataset, val_loader, model)
+    result = validate_epoch(val_loader, model)
 
     # unhook
-    model.item_emb_table.get_weight = model.item_emb_table.get_weight.func
-    model.user_emb_table.get_weight = model.user_emb_table.get_weight.func
-    return result["ndcg"]
+    model.embedding.forward = model.embedding.forward.func
+    return result["auc"]
 
 
 def _crossover(
     cur_top_candidate: List[Candidate],
     n_crossover: int,
-    num_user,
-    num_item,
     hidden_size,
     target_sparsity: Optional[float] = None,
 ) -> List[Candidate]:
@@ -286,25 +348,16 @@ def _crossover(
         while True:
             father, mother = random.choices(cur_top_candidate, k=2)
 
-            # mix user
-            father_user = father.user_mask
-            mother_user = mother.user_mask
-            son_user = torch.empty_like(father_user)
-            father_choice_mask = torch.randint(2, size=(num_user,), dtype=bool)
+            # mix save mask
+            father_mask = father.save_mask
+            mother_mask = mother.save_mask
+            son_mask = torch.empty_like(father_mask)
+            father_choice_mask = torch.randint(2, size=(len(father_mask),), dtype=bool)
             mother_choice_mask = torch.logical_not(father_choice_mask)
-            son_user[father_choice_mask] = father_user[father_choice_mask]
-            son_user[mother_choice_mask] = mother_user[mother_choice_mask]
+            son_mask[father_choice_mask] = father_mask[father_choice_mask]
+            son_mask[mother_choice_mask] = mother_mask[mother_choice_mask]
 
-            # mix item
-            father_item = father.item_mask
-            mother_item = mother.item_mask
-            son_item = torch.empty_like(father_item)
-            father_choice_mask = torch.randint(2, size=(num_item,), dtype=bool)
-            mother_choice_mask = torch.logical_not(father_choice_mask)
-            son_item[father_choice_mask] = father_item[father_choice_mask]
-            son_item[mother_choice_mask] = mother_item[mother_choice_mask]
-
-            candidate = Candidate(item_mask=son_item, user_mask=son_user)
+            candidate = Candidate(son_mask, father[1])
 
             if target_sparsity is None:
                 break
@@ -322,8 +375,6 @@ def _mutate(
     cur_top_candidate: List[Candidate],
     n_mutate: int,
     p_mutate: float,
-    num_user: int,
-    num_item: int,
     hidden_size: int,
     target_sparsity: Optional[float] = None,
     naive=False,
@@ -335,26 +386,17 @@ def _mutate(
         while True:
             parent = random.choice(cur_top_candidate)
 
-            son_item = parent.item_mask.clone()
-            mask = torch.rand(son_item.shape[0]) < p_mutate
+            son_mask = parent.save_mask.clone()
+            mask = torch.rand(son_mask.shape[0]) < p_mutate
             num_mutated = mask.sum().item()
-            son_item[mask] = _sampling_by_weight(
-                target_sparsity,
-                hidden_size,
-                num_mutated,
-                naive,
-            )
-            son_user = parent.user_mask.clone()
-            mask = torch.rand(son_user.shape[0]) < p_mutate
-            num_mutated = mask.sum().item()
-            son_user[mask] = _sampling_by_weight(
+            son_mask[mask] = _sampling_by_weight(
                 target_sparsity,
                 hidden_size,
                 num_mutated,
                 naive,
             )
 
-            candidate = Candidate(item_mask=son_item, user_mask=son_user)
+            candidate = Candidate(son_mask, parent[1])
 
             if target_sparsity is None:
                 break
@@ -372,17 +414,14 @@ def _mutate(
 
 def _get_sparsity(candidate: Candidate, hidden_size):
     # mask count from 0
-    n_elements = (candidate.user_mask + 1).sum() + (candidate.item_mask + 1).sum()
-
-    num_item = len(candidate.item_mask)
-    num_user = len(candidate.user_mask)
-    n_max_elements = (num_item + num_user) * hidden_size
+    sub_mask, n_max_elements = candidate.extra
+    n_elements = ((candidate.save_mask + 1) * sub_mask).sum()
 
     cur_sparsity = 1 - n_elements / n_max_elements
     return cur_sparsity
 
 
-def evol_search_lightgcn(
+def evol_search_deepfm(
     model,
     n_generations: int,
     population: int,
@@ -395,10 +434,10 @@ def evol_search_lightgcn(
     target_sparsity=None,
     naive=False,
 ) -> Tuple[torch.LongTensor, torch.LongTensor, float]:
-    """Evolutionary search for LightGCN with OptEmbed
+    """Evolutionary search for DeepFM with OptEmbed
 
     Args:
-        model: LightGCN model with OptEmbed
+        model: DeepFM model with OptEmbed
         n_generations: number of generations to run
         population: Starting population
 
@@ -416,25 +455,25 @@ def evol_search_lightgcn(
             reduce max hidden size
 
     Returns:
-        best_item_mask: (torch.LongTensor, shape (num_items,))
-            best_item_mask[i] = how many dimension assigned for item i
+        best_mask: (torch.LongTensor, shape (num_items,))
+            best_mask[i] = how many dimension assigned for field/feature i
 
-        best_user_mask: (torch.LongTensor, shape (num_users,))
-        best_ndcg (float)
+        best_auc (float)
     """
 
     cur_top_values = None
     cur_top_candidate = []
 
-    num_items = train_dataset.num_items
-    num_users = train_dataset.num_users
+    train_dataset.field_dims
 
-    assert isinstance(model.item_emb_table, IOptEmbed)
-    assert isinstance(model.user_emb_table, IOptEmbed)
-    hidden_size = model.item_emb_table._hidden_size
+    assert isinstance(model.embedding, IOptEmbed)
+    hidden_size = model.embedding._hidden_size
 
     candidates = [
-        _generate_lightgcn_candidate(num_users, num_items, hidden_size, target_sparsity)
+        _generate_candidate(
+            model.embedding,
+            target_sparsity,
+        )
         for _ in range(population)
     ]
 
@@ -442,7 +481,7 @@ def evol_search_lightgcn(
         logger.debug(f"start {gen=}")
         metrics = torch.tensor(
             [
-                _validate_candidate(model, candidate, val_dataloader, train_dataset)
+                _validate_candidate(model, candidate, val_dataloader)
                 for candidate in candidates
             ]
         )
@@ -460,7 +499,7 @@ def evol_search_lightgcn(
         cur_best_sparsity = _get_sparsity(cur_top_candidate[0], hidden_size)
         logger.debug(
             f"cur best {cur_top_candidate[0]}"
-            f"- ndcg: {cur_top_values[0]:.4f}"
+            f"- auc: {cur_top_values[0]:.4f}"
             f"- sparsity: {cur_best_sparsity:.4f}"
         )
 
@@ -470,8 +509,6 @@ def evol_search_lightgcn(
             crossovers = _crossover(
                 cur_top_candidate,
                 n_crossover,
-                num_users,
-                num_items,
                 hidden_size,
                 target_sparsity,
             )
@@ -481,22 +518,20 @@ def evol_search_lightgcn(
                 cur_top_candidate,
                 n_mutate,
                 p_mutate,
-                num_users,
-                num_items,
                 hidden_size,
                 target_sparsity,
             )
             candidates.extend(mutates)
 
     top_candidate = cur_top_candidate[0]
-    item_mask = top_candidate.item_mask
-    user_mask = top_candidate.user_mask
+    mask = top_candidate.mask
 
-    return item_mask, user_mask, cur_top_values[0]
+    return mask, cur_top_values[0]
 
 
 def _delete_cache(module: OptEmbed, grad_input, grad_output):
     module._cur_weight = None
+    module.get_submask.cache_clear()
 
 
 # Retrain

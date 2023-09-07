@@ -1,7 +1,8 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
+import loguru
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -10,10 +11,101 @@ from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
-from src.trainer.deepfm import train_epoch, validate_epoch
+from src.models.embeddings.deepfm_opt_embed import IOptEmbed, OptEmbed
+from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
+
+
+def train_epoch(
+    dataloader: DataLoader,
+    model: DeepFM,
+    optimizers: List[torch.optim.Optimizer],
+    device="cuda",
+    log_step=10,
+    profiler=None,
+    clip_grad=0,
+    alpha=0,
+) -> Dict[str, float]:
+    """Custom training logic for DeepFM OptEmbed
+
+    Customization have been done:
+        - Add `alpha` (weight for l_s)
+        - Use multiple optimizers instead of one.
+    """
+    model.train()
+    model.to(device)
+
+    model.embedding: IOptEmbed
+
+    loss_dict = dict(loss=0, loss_s=0)
+    criterion = torch.nn.BCEWithLogitsLoss()
+    criterion = criterion.to(device)
+
+    is_opt_embed = isinstance(model.embedding, OptEmbed)
+    for idx, batch in enumerate(dataloader):
+        inputs, labels = batch
+
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        outputs = model(inputs)
+
+        loss = criterion(outputs, labels.float())
+        loss_s = model.embedding.get_l_s()
+        loss = loss + alpha * loss_s
+
+        for optimizer in optimizers:
+            optimizer.zero_grad()
+        loss.backward()
+        if clip_grad:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+        for optimizer in optimizers:
+            optimizer.step()
+
+        if is_opt_embed:
+            loss_dict["loss_s"] += loss_s.item()
+
+        loss_dict["loss"] += loss.item()
+
+        # Logging
+        if log_step and idx % log_step == 0:
+            msg = f"Idx: {idx}"
+            sparsity, n_params = model.embedding.get_sparsity(True)
+
+            msg += f" - {sparsity=:.4f} - {n_params=}"
+
+            for metric, value in loss_dict.items():
+                if value > 0:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.4}"
+
+            loguru.logger.info(msg)
+
+            t_param = model.embedding._mask_e_module._t_param
+            print(
+                f"Threshold --- "
+                f"Max: {t_param.max()}"
+                f"- Min: {t_param.min()}"
+                f"- Mean: {t_param.mean()}"
+            )
+            norm = model.embedding._weight.norm(1, dim=1)
+            print(
+                f"Norm --- "
+                f"Max: {norm.max()}"
+                f"- Min: {norm.min()}"
+                f"- Mean: {norm.mean()}"
+            )
+
+        if profiler:
+            profiler.step()
+
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        loss_dict[metric] = avg
+
+    return loss_dict
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -111,6 +203,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
     val_dataset.pop_info()
+    val_dataset.describe()
 
     val_dataloader = DataLoader(
         val_dataset,
@@ -142,11 +235,35 @@ def main(argv: Optional[Sequence[str]] = None):
 
         return
 
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config["learning_rate"],
-        weight_decay=config["weight_decay"],
+    para_dict = {"t_param": [], "default": []}
+
+    for name, p in model.named_parameters():
+        if "t_param" in name:
+            para_dict["t_param"].append(p)
+        else:
+            para_dict["default"].append(p)
+
+    optimizer_threshold = torch.optim.SGD(
+        [
+            {
+                "params": para_dict["t_param"],
+                "lr": config["opt_embed"]["t_param_lr"],
+                "weight_decay": 0,
+            },
+        ]
     )
+
+    optimizer = torch.optim.Adam(
+        [
+            {
+                "params": para_dict["default"],
+                "lr": config["learning_rate"],
+                "weight_decay": config["weight_decay"],
+            },
+        ]
+    )
+
+    optimizers = [optimizer, optimizer_threshold]
 
     num_params = 0
     for p in model.parameters():
@@ -162,6 +279,15 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
+    os.makedirs(os.path.dirname(config["opt_embed"]["init_weight_path"]), exist_ok=True)
+    torch.save(
+        {
+            "full": model.state_dict(),
+            "emb": model.embedding.state_dict(),
+        },
+        config["opt_embed"]["init_weight_path"],
+    )
+
     best_auc = 0
     num_epochs = config["num_epochs"]
     try:
@@ -170,10 +296,11 @@ def main(argv: Optional[Sequence[str]] = None):
             train_metrics = train_epoch(
                 train_dataloader,
                 model,
-                optimizer,
+                optimizers,
                 device,
                 config["log_step"],
                 train_prof,
+                alpha=config["opt_embed"]["alpha"],
             )
 
             train_metrics.update(metrics.get_env_metrics())
@@ -188,6 +315,10 @@ def main(argv: Optional[Sequence[str]] = None):
                 )
 
                 val_metrics.update(metrics.get_env_metrics())
+                sparsity, n_params = model.embedding.get_sparsity(True)
+
+                logger.log_metric("sparsity", sparsity, epoch_idx)
+                logger.info(f"{n_params=}")
 
                 for key, value in val_metrics.items():
                     logger.log_metric(f"val/{key}", value, epoch_idx)
@@ -200,9 +331,10 @@ def main(argv: Optional[Sequence[str]] = None):
                         "state_dict": model.state_dict(),
                         "model_config": model_config,
                         "val_metrics": val_metrics,
-                        "filed_dims": train_dataset.field_dims,
+                        "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
+
     except KeyboardInterrupt:
         pass
 
