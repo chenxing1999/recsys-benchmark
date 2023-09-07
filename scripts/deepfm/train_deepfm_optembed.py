@@ -279,6 +279,15 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
+    os.makedirs(os.path.dirname(config["opt_embed"]["init_weight_path"]), exist_ok=True)
+    torch.save(
+        {
+            "full": model.state_dict(),
+            "emb": model.embedding.state_dict(),
+        },
+        config["opt_embed"]["init_weight_path"],
+    )
+
     best_auc = 0
     num_epochs = config["num_epochs"]
     try:
@@ -322,6 +331,7 @@ def main(argv: Optional[Sequence[str]] = None):
                         "state_dict": model.state_dict(),
                         "model_config": model_config,
                         "val_metrics": val_metrics,
+                        "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
 

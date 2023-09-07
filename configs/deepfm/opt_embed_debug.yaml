@@ -7,7 +7,7 @@ model:
   p_dropout: 0.0
   use_batchnorm: True
   embedding_config:
-    name: optembed
+    name: deepfm_optembed
 
 train_dataloader:
   dataset:
@@ -45,7 +45,7 @@ enable_profile: false
 
 # Opt Specific config
 opt_embed:
-  init_weight_dir: checkpoints/opt/initial.pth
+  init_weight_path: checkpoints/opt/initial.pth
   t_param_lr: 0.0001
   alpha: 0.0001
 
