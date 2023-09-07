@@ -23,6 +23,19 @@ class IOptEmbed(IEmbedding):
     def get_l_s(self):
         return 0
 
+    def get_sparsity(self, get_n_params=False):
+        """
+        Args:
+            get_n_params
+
+        Returns: Tuple[float, int] or float
+            if get_n_params,
+                return sparsity, nnz
+            else
+                return sparsity
+        """
+        ...
+
 
 class OptEmbed(IOptEmbed):
     """Opt Embed wrapper for paper
@@ -235,6 +248,18 @@ class OptEmbed(IOptEmbed):
         if get_n_params:
             return sparsity, nnz
         return sparsity
+
+    def get_mask_e(self):
+        if isinstance(self._mask_e_module, nn.Identity):
+            return torch.ones(self._num_item, dtype=int)
+
+        # apply mask e to weight
+        emb = self._mask_e_module(self._weight)
+
+        # mask_e[i] = 1 if still use feature i, else 0
+        # mask_e shape=num_feature
+        mask_e = (emb.norm(1, 1) > 0).to(int)
+        return mask_e.cpu()
 
     @lru_cache(1)
     def get_submask(self) -> torch.LongTensor:
@@ -524,14 +549,95 @@ def evol_search_deepfm(
             candidates.extend(mutates)
 
     top_candidate = cur_top_candidate[0]
-    mask = top_candidate.mask
+    mask = top_candidate.save_mask
 
     return mask, cur_top_values[0]
 
 
 def _delete_cache(module: OptEmbed, grad_input, grad_output):
     module._cur_weight = None
-    module.get_submask.cache_clear()
+
+    if isinstance(module, OptEmbed):
+        module.get_submask.cache_clear()
 
 
 # Retrain
+class RetrainOptEmbed(IOptEmbed):
+    def __init__(
+        self,
+        field_dims: Union[List[int], int],
+        hidden_size,
+        mode: Optional[str],
+        t_init: Optional[float] = 0,
+        mode_threshold_e="field",
+        mode_threshold_d="field",
+        norm=1,
+        target_sparsity: Optional[float] = None,
+    ):
+        super().__init__()
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        num_item = sum(field_dims)
+        self._num_item = num_item
+        self._field_dims = torch.tensor(field_dims, dtype=torch.int64)
+        self._mode_d = mode_threshold_d
+        self._mode = mode
+        self._hidden_size = hidden_size
+
+        self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
+        _full_mask_d = get_mask(hidden_size)
+        self.register_buffer("_full_mask_d", _full_mask_d)
+
+        self._mask_d = None
+        self._mask_e = None
+        self._mask = None
+        self._sparsity = 0
+
+    def init_mask(self, mask_e, mask_d):
+        """Calculate final mask to apply to create weight"""
+
+        # Get mask e
+        mask_e = mask_e.unsqueeze(-1)
+
+        # Get mask d
+        if self._mode_d == "field":
+            mask_d = torch.repeat_interleave(
+                mask_d,
+                self._field_dims,
+                dim=0,
+                output_size=self._num_item,
+            )
+        mask_d = F.embedding(mask_d, self._full_mask_d)
+
+        # Apply mask
+        self._mask = nn.Parameter(mask_d * mask_e, False)
+
+        self._cur_weight = None
+        self._handle = self.register_full_backward_hook(_delete_cache)
+
+        return self._mask
+
+    def get_weight(self, mask_d: Optional[torch.Tensor] = None):
+        if self._mask is None:
+            self.init_mask()
+
+        self._cur_weight = self._weight * self._mask
+        return self._cur_weight
+
+    def forward(self, x, mask_d=None):
+        if self._cur_weight is None:
+            self.get_weight()
+
+        if self._mode is None:
+            return F.embedding(x, self._cur_weight)
+        else:
+            return F.embedding_bag(x, self._cur_weight, mode=self._mode)
+
+    def get_sparsity(self, get_n_params=False):
+        nnz = torch.nonzero(self._mask).size(0)
+        sparsity = 1 - nnz / (self._hidden_size * self._num_item)
+
+        if not get_n_params:
+            return sparsity
+        return sparsity, nnz

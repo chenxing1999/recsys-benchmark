@@ -83,20 +83,21 @@ def train_epoch(
 
             loguru.logger.info(msg)
 
-            t_param = model.embedding._mask_e_module._t_param
-            print(
-                f"Threshold --- "
-                f"Max: {t_param.max()}"
-                f"- Min: {t_param.min()}"
-                f"- Mean: {t_param.mean()}"
-            )
-            norm = model.embedding._weight.norm(1, dim=1)
-            print(
-                f"Norm --- "
-                f"Max: {norm.max()}"
-                f"- Min: {norm.min()}"
-                f"- Mean: {norm.mean()}"
-            )
+            # DEBUG CODE ---
+            # t_param = model.embedding._mask_e_module._t_param
+            # print(
+            #     f"Threshold --- "
+            #     f"Max: {t_param.max()}"
+            #     f"- Min: {t_param.min()}"
+            #     f"- Mean: {t_param.mean()}"
+            # )
+            # norm = model.embedding._weight.norm(1, dim=1)
+            # print(
+            #     f"Norm --- "
+            #     f"Max: {norm.max()}"
+            #     f"- Min: {norm.min()}"
+            #     f"- Mean: {norm.mean()}"
+            # )
 
         if profiler:
             profiler.step()
@@ -227,7 +228,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     if config["run_test"]:
         checkpoint = torch.load(config["checkpoint_path"])
-        model.load_state_dict(checkpoint["state_dict"])
+        keys = model.load_state_dict(checkpoint["state_dict"])
 
         val_metrics = validate_epoch(val_dataloader, model, device)
         for key, value in val_metrics.items():
@@ -279,14 +280,23 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
-    os.makedirs(os.path.dirname(config["opt_embed"]["init_weight_path"]), exist_ok=True)
-    torch.save(
-        {
-            "full": model.state_dict(),
-            "emb": model.embedding.state_dict(),
-        },
-        config["opt_embed"]["init_weight_path"],
-    )
+    emb_config = model_config["embedding_config"]
+    init_weight_path = config["opt_embed"]["init_weight_path"]
+    if "retrain" not in emb_config["name"]:
+        os.makedirs(os.path.dirname(init_weight_path), exist_ok=True)
+        torch.save(
+            {
+                "full": model.state_dict(),
+                "emb": model.embedding.state_dict(),
+            },
+            config["opt_embed"]["init_weight_path"],
+        )
+    else:
+        info = torch.load(init_weight_path)
+        mask = info["mask"]
+        keys = model.load_state_dict(info["full"], False)
+        assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
+        model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
 
     best_auc = 0
     num_epochs = config["num_epochs"]

@@ -5,6 +5,7 @@ from loguru import logger
 
 from .base import IEmbedding, VanillaEmbedding
 from .deepfm_opt_embed import OptEmbed as DeepFMOptEmbed
+from .deepfm_opt_embed import RetrainOptEmbed as DeepFMRetrainOptEmbed
 from .dh_embedding import DHEmbedding
 from .lightgcn_opt_embed import OptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
@@ -19,6 +20,7 @@ NAME_TO_CLS = {
     "optembed_d": OptEmbed,  # will only use mask D
     "optembed": OptEmbed,
     "deepfm_optembed": DeepFMOptEmbed,
+    "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
 }
 
 

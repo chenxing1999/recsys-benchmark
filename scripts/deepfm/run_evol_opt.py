@@ -94,7 +94,7 @@ def main(argv: Optional[Sequence[str]] = None):
     n_mutate = 10
     p_mutate = 0.1
     k = 15
-    best_item_mask, best_user_mask, best_ndcg = evol_search_deepfm(
+    mask, best_ndcg = evol_search_deepfm(
         model,
         num_generations,
         population,
@@ -107,6 +107,14 @@ def main(argv: Optional[Sequence[str]] = None):
         target_sparsity=None,
         naive=False,
     )
+
+    init_weight_path = config["opt_embed"]["init_weight_path"]
+    info = torch.load(init_weight_path)
+    info["mask"] = {
+        "mask_d": mask,
+        "mask_e": model.embedding.get_mask_e(),
+    }
+    torch.save(info, init_weight_path)
 
 
 if __name__ == "__main__":
