@@ -199,6 +199,7 @@ class OptEmbed(IOptEmbed):
         """
         device = self._weight.data.device
         b = x.shape[0]
+        mode = self._mode
 
         if self.training:
             x = F.embedding(x, self._weight)
@@ -207,12 +208,24 @@ class OptEmbed(IOptEmbed):
                 0, self._hidden_size, size=(b, self._num_field), device=device
             )
             mask_d = F.embedding(mask_d, self._full_mask_d)
-            return mask_d * emb
+            emb = mask_d * emb
+            if mode is None:
+                return emb
+            elif mode == "sum":
+                return emb.sum(1)
+            elif mode == "max":
+                return emb.max(1)
+            elif mode == "mean":
+                return emb.mean(1)
 
         # Evaluation forward logic
         if self._cur_weight is None:
             self.get_weight(mask_d)
-        return F.embedding(x, self._cur_weight)
+
+        if self._mode is None:
+            return F.embedding(x, self._cur_weight)
+        else:
+            return F.embedding_bag(x, self._cur_weight, mode=self._mode)
 
     def get_sparsity(self, get_n_params=False):
         emb = self._mask_e_module(self._weight)

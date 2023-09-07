@@ -165,5 +165,14 @@ class DHEmbedding(IEmbedding):
             else:
                 raise NotImplementedError()
 
+        is_flatten = False
+        if len(embs.shape) == 3:
+            is_flatten = True
+            batch, num_field, dimension = embs.shape
+            embs = embs.reshape(batch * num_field, dimension)
+
         outs = self._seq(embs)
+        if is_flatten:
+            outs = outs.reshape(batch, num_field, -1)
+
         return outs

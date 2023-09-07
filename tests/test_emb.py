@@ -47,11 +47,15 @@ def test_init_logic_dhe(num_item, inp_size):
 
 
 EMBEDDING_NAMES = list(NAME_TO_CLS.keys())
-NOT_PEP = [name for name in EMBEDDING_NAMES if not name.startswith("pep")]
+GENERAL_EMB = [
+    name
+    for name in EMBEDDING_NAMES
+    if not name.startswith("pep") and not name.startswith("deepfm")
+]
 
 
-@pytest.mark.parametrize("name", NOT_PEP)
-def test_api_embedding(name: str):
+@pytest.mark.parametrize("name", GENERAL_EMB)
+def test_api_embedding_lightgcn(name: str):
     num_item = 3
     hidden_size = 7
     batch_size = 11
@@ -62,6 +66,35 @@ def test_api_embedding(name: str):
     res = emb(inp)
 
     assert res.shape == (batch_size, hidden_size)
+
+
+@pytest.mark.parametrize("name", GENERAL_EMB)
+def test_api_embedding_lightgcn_get_weight(name: str):
+    num_item = 3
+    hidden_size = 7
+
+    emb_config = {"name": name}
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    res = emb.get_weight()
+
+    assert res.shape == (num_item, hidden_size)
+
+
+@pytest.mark.parametrize("name", GENERAL_EMB + ["deepfm_optembed"])
+def test_api_embedding_deepfm(name: str):
+    field_dims = [2, 3, 5]
+    hidden_size = 7
+    batch_size = 11
+
+    num_field = len(field_dims)
+    num_item = sum(field_dims)
+
+    emb_config = {"name": name}
+    emb = get_embedding(emb_config, field_dims, hidden_size)
+    inp = torch.randint(num_item, size=(batch_size, num_field))
+    res = emb(inp)
+
+    assert res.shape == (batch_size, num_field, hidden_size)
 
 
 def test_api_embedding_pep():
@@ -114,7 +147,7 @@ def test_api_embedding_pep_retrain():
         assert res.shape == (batch_size, hidden_size)
 
 
-@pytest.mark.parametrize("name", NOT_PEP)
+@pytest.mark.parametrize("name", GENERAL_EMB)
 def test_api_embedding_bag(name: str):
     num_item = 3
     hidden_size = 7
