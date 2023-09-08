@@ -7,7 +7,7 @@ from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.dataset.criteo.utils import NUM_FEATS
 
 CUR_DIR = os.path.dirname(__file__)
-SAMPLE_DATASET = os.path.join(CUR_DIR, "assets/train_criteo.txt")
+SAMPLE_DATASET = os.path.join(CUR_DIR, "assets/train_criteo_sample.txt")
 
 
 def test_criteo_dataset_simple():
