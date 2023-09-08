@@ -51,6 +51,9 @@ def get_cache_data(
             loc += len(line)
             values = line.rstrip("\n").split("\t")
             if len(values) != NUM_FEATS + 1:
+                import pdb
+
+                pdb.set_trace()
                 continue
 
             if lines and idx not in lines:
