@@ -21,6 +21,7 @@ dependencies = [
     "tensorboard",
     "optuna",
     "psutil",
+    "scikit-learn",
 ]
 dynamic = ["version"]
 
