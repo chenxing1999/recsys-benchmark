@@ -6,6 +6,7 @@ repos:
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        exclude: tests/assets/train_criteo_sample.txt
       - id: detect-aws-credentials
         args: ["--allow-missing-credentials"]
       - id: detect-private-key

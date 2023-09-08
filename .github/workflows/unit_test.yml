@@ -31,4 +31,7 @@ jobs:
           pre-commit run -a
       - name: Test with pytest
         run: |
-          pytest tests
+          coverage run --source src/ -m pytest tests
+      - name: coverage report
+        run: |
+          coverage report

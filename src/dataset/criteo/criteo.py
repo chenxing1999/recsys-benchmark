@@ -1,13 +1,14 @@
 import os
 from collections import defaultdict
-from typing import DefaultDict, Dict, Final, Optional, Tuple
+from functools import partial
+from typing import DefaultDict, Dict, Final, List, Optional, Tuple
 
 import torch
 from loguru import logger
 from torch.utils.data import Dataset
 
 from .base import ICriteoDatset
-from .utils import convert_numeric_feature, get_cache_data
+from .utils import NUM_FEATS, NUM_INT_FEATS, convert_numeric_feature, get_cache_data
 
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
 FeatMapper = Dict[int, Dict[str, int]]
@@ -21,8 +22,10 @@ class CriteoDataset(Dataset, ICriteoDatset):
         On my laptop, this improves training speed by around 10 times.
     """
 
-    NUM_INT_FEATS: Final[int] = 13
-    NUM_FEATS: Final[int] = 39
+    NUM_INT_FEATS: Final[int] = NUM_INT_FEATS
+    NUM_FEATS: Final[int] = NUM_FEATS
+
+    field_dims: List[int]
 
     def __init__(
         self,
@@ -78,7 +81,9 @@ class CriteoDataset(Dataset, ICriteoDatset):
         # Construct actual feat mapper dictionary
         self.feat_mappers: Dict[int, DefaultDict[str, int]] = {}
         for i, values in feat_mappers.items():
-            self.feat_mappers[i] = defaultdict(lambda: defaults[i])
+            # if use lambda: defaults[i], the value defaults[i] will only
+            # be calculated after i have been changed.
+            self.feat_mappers[i] = defaultdict(partial(lambda x: x, defaults[i]))
             self.feat_mappers[i].update(values)
 
         self.field_dims = [
