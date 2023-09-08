@@ -7,7 +7,7 @@ model:
   p_dropout: 0.0
   use_batchnorm: True
   embedding_config:
-    name: deepfm_optembed
+    name: deepfm_optembed_retrain
 
 train_dataloader:
   dataset:
@@ -35,7 +35,7 @@ run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
 num_epochs: 1000
-log_step: 1000
+log_step: 100
 
 weight_decay: 0.001
 learning_rate: 0.00003
