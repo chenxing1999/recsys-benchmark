@@ -7,7 +7,7 @@ from loguru import logger
 from torch.utils.data import IterableDataset
 
 from .base import ICriteoDatset
-from .utils import convert_numeric_feature, get_cache_data
+from .utils import NUM_FEATS, NUM_INT_FEATS, convert_numeric_feature, get_cache_data
 
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
 FeatMapper = Dict[int, Dict[str, int]]
@@ -76,9 +76,7 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
             self.feat_mappers[i] = defaultdict(lambda: defaults[i])
             self.feat_mappers[i].update(values)
 
-        self.field_dims = [
-            len(self.feat_mappers[i + 1]) + 1 for i in range(self.NUM_FEATS)
-        ]
+        self.field_dims = [len(self.feat_mappers[i + 1]) + 1 for i in range(NUM_FEATS)]
         field_dims = torch.tensor(self.field_dims)
         field_dims = torch.cat([torch.tensor([0], dtype=torch.long), field_dims])
         self.offsets = torch.cumsum(field_dims[:-1], 0)
@@ -96,22 +94,22 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
         with open(self.path) as fin:
             for line in fin:
                 line = line.rstrip("\n").split("\t")
-                if len(line) != self.NUM_FEATS + 1:
+                if len(line) != NUM_FEATS + 1:
                     continue
 
                 label = int(line[0])
 
-            feats = [0] * self.NUM_FEATS
-            for i in range(1, self.NUM_INT_FEATS + 1):
-                value = convert_numeric_feature(line[i])
-                feats[i - 1] = feat_mapper[i][value]
+                feats = [0] * NUM_FEATS
+                for i in range(1, NUM_INT_FEATS + 1):
+                    value = convert_numeric_feature(line[i])
+                    feats[i - 1] = feat_mapper[i][value]
 
-            for i in range(self.NUM_INT_FEATS + 1, self.NUM_FEATS + 1):
-                feats[i - 1] = feat_mapper[i][line[i]]
+                for i in range(NUM_INT_FEATS + 1, NUM_FEATS + 1):
+                    feats[i - 1] = feat_mapper[i][line[i]]
 
-            feats = torch.tensor(feats)
-            feats = feats + self.offsets
-            yield feats, label
+                feats = torch.tensor(feats)
+                feats = feats + self.offsets
+                yield feats, label
 
     def pop_info(self):
         # TODO: Refactor this
