@@ -1,9 +1,10 @@
 model:
-  num_factor: 16
+  num_factor: 64
   hidden_sizes:
-    - 16
-    - 16
-  p_dropout: 0.2
+    - 400
+    - 400
+    - 400
+  p_dropout: 0.5
   embedding_config:
     name: vanilla
 
