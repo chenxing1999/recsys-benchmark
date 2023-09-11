@@ -11,6 +11,9 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import get_graph_model
 from src.trainer.lightgcn import train_epoch, validate_epoch
+from src.utils import set_seed
+
+set_seed(2023)
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
