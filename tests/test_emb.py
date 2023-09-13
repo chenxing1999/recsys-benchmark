@@ -34,10 +34,15 @@ def test_init_logic_qr(num_item, divider, expected_size):
     ],
 )
 def test_init_logic_dhe(num_item, inp_size):
+    ORIGINAL_DHE_COUNTER = DHEmbedding.COUNTER
     emb1 = DHEmbedding(num_item, 64, None, inp_size, [64])
 
+    # Reset counter to create same embedding cache
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
     emb2 = DHEmbedding(num_item, 64, None, inp_size, [64])
-    emb2._prefix = 0
+
+    # Reset counter to reset state change
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
 
     cache1 = emb1._cache
     cache2 = emb2._cache
