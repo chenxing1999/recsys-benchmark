@@ -12,6 +12,10 @@ import train_lightgcn
 import yaml
 from loguru import logger
 
+from src.utils import set_seed
+
+set_seed(2023)
+
 DEFAULT_BASE_CONFIG_PATH = "../configs/lightgcn_config.yaml"
 DEFAULT_BASE_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__), DEFAULT_BASE_CONFIG_PATH
@@ -135,11 +139,16 @@ def save_best_on_val_callbacks(study, frozen_trial):
 
 
 def main():
+    sampler = optuna.samplers.TPESampler(
+        seed=2023
+    )  # Make the sampler behave in a deterministic way.
+
     study = optuna.create_study(
         "sqlite:///db.sqlite3",
         study_name=RUN_NAME,
         direction="maximize",
         load_if_exists=True,
+        sampler=sampler,
     )
 
     study.optimize(objective, 30, callbacks=[save_best_on_val_callbacks])

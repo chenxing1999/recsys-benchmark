@@ -10,6 +10,7 @@ from .dh_embedding import DHEmbedding
 from .lightgcn_opt_embed import OptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
+from .tensortrain_embeddings import TTEmbedding
 
 NAME_TO_CLS = {
     "vanilla": VanillaEmbedding,
@@ -21,6 +22,7 @@ NAME_TO_CLS = {
     "optembed": OptEmbed,
     "deepfm_optembed": DeepFMOptEmbed,
     "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
+    "tt_emb": TTEmbedding,
 }
 
 

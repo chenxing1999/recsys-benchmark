@@ -16,6 +16,8 @@ class DHEmbedding(IEmbedding):
     """DHE Hashing method proposed in
     https://arxiv.org/pdf/2010.10784.pdf"""
 
+    COUNTER = 0
+
     def __init__(
         self,
         field_dims: Union[int, List[int]],
@@ -52,6 +54,12 @@ class DHEmbedding(IEmbedding):
 
         num_item = sum(field_dims)
         self.m = int(1e6)
+
+        # Using prefix to make sure that embedding of
+        # user and item are different
+        self._prefix = DHEmbedding.COUNTER
+        DHEmbedding.COUNTER += num_item
+
         with open(prime_file) as fin:
             primes = json.load(fin)
 
@@ -103,7 +111,7 @@ class DHEmbedding(IEmbedding):
 
         # Setting torch manual seed as item instead of 0
         # to allow retrieving item hash in a function
-        torch.manual_seed(item)
+        torch.manual_seed(item + self._prefix)
 
         a = torch.randint(NEGATIVE_LARGE_INT, LARGE_INT, (k,))
         b = torch.randint(NEGATIVE_LARGE_INT, LARGE_INT, (k,))
@@ -176,3 +184,9 @@ class DHEmbedding(IEmbedding):
             outs = outs.reshape(batch, num_field, -1)
 
         return outs
+
+    def set_extra_state(self, state):
+        self._prefix = state["_prefix"]
+
+    def get_extra_state(self):
+        return {"_prefix": self._prefix}
