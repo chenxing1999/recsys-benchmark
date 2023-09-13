@@ -10,6 +10,7 @@ from src.models.embeddings import (
     QRHashingEmbedding,
     get_embedding,
 )
+from src.models.embeddings.tensortrain_embeddings import TT_EMB_AVAILABLE
 
 
 @pytest.mark.parametrize(
@@ -33,9 +34,15 @@ def test_init_logic_qr(num_item, divider, expected_size):
     ],
 )
 def test_init_logic_dhe(num_item, inp_size):
+    ORIGINAL_DHE_COUNTER = DHEmbedding.COUNTER
     emb1 = DHEmbedding(num_item, 64, None, inp_size, [64])
 
+    # Reset counter to create same embedding cache
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
     emb2 = DHEmbedding(num_item, 64, None, inp_size, [64])
+
+    # Reset counter to reset state change
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
 
     cache1 = emb1._cache
     cache2 = emb2._cache
@@ -46,11 +53,36 @@ def test_init_logic_dhe(num_item, inp_size):
         assert (v1 == v2).all()
 
 
+@pytest.mark.parametrize(
+    ["num_item", "inp_size"],
+    [
+        [32, 64],
+        [13, 32],
+    ],
+)
+def test_init_dhe_twice(num_item, inp_size):
+    emb1 = DHEmbedding(num_item, 64, None, inp_size, [64])
+
+    emb2 = DHEmbedding(num_item, 64, None, inp_size, [64])
+
+    cache1 = emb1._cache
+    cache2 = emb2._cache
+    assert len(cache1) == len(cache2)
+    assert len(cache1) == num_item
+
+    for v1, v2 in zip(cache1, cache2):
+        assert (v1 != v2).any()
+
+
 EMBEDDING_NAMES = list(NAME_TO_CLS.keys())
 GENERAL_EMB = [
     name
     for name in EMBEDDING_NAMES
-    if not name.startswith("pep") and not name.startswith("deepfm")
+    if (
+        not name.startswith("pep")
+        and not name.startswith("deepfm")
+        and name != "tt_emb"
+    )
 ]
 
 
@@ -161,3 +193,91 @@ def test_api_embedding_bag(name: str):
     res = emb(inp)
 
     assert res.shape == (batch_size, hidden_size)
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_api_lightgcn():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": [2, 4, 2],
+    }
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    res = emb.get_weight()
+
+    assert res.shape == (num_item, hidden_size)
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_result_lightgcn():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": [2, 4, 2],
+    }
+    inp = torch.tensor([1, 1, 2, 2], device="cuda")
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    emb = emb.to("cuda")
+    res = emb(inp)
+
+    assert res.shape == (4, hidden_size)
+    assert (res[0] == res[1]).all()
+    assert (res[2] == res[3]).all()
+
+    w = emb.get_weight()
+    assert (w[1] == res[0]).all()
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_result_deepfm():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": [2, 4, 2],
+    }
+    inp = torch.tensor([[1, 2, 0], [1, 2, 0]], device="cuda")
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    emb = emb.to("cuda")
+    res = emb(inp)
+
+    assert res.shape == (2, 3, hidden_size)
+    assert (res[0] == res[1]).all()
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_assertion_device_model():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": [2, 4, 2],
+    }
+    inp = torch.tensor([1, 1, 2, 2], device="cuda")
+    emb = get_embedding(emb_config, num_item, hidden_size)
+
+    with pytest.raises(AssertionError):
+        emb(inp)
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_assertion_device_input():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": [2, 4, 2],
+    }
+    inp = torch.tensor([1, 1, 2, 2], device="cpu")
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    emb = emb.to("cuda")
+
+    with pytest.raises(AssertionError):
+        emb(inp)
