@@ -149,7 +149,7 @@ def main(argv: Optional[Sequence[str]] = None):
     )
 
     num_params = 0
-    for p in model.parameters():
+    for p in model.embedding.parameters():
         num_params += p.numel()
     logger.log_metric("num_params", num_params)
 

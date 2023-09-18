@@ -32,8 +32,8 @@ test_dataloader:
 run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
-num_epochs: 1000
-log_step: 100
+num_epochs: 15
+log_step: 1000
 
 weight_decay: 0.000001
 learning_rate: 0.001
@@ -68,4 +68,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: original-torchfm-correct-weight_decay
+  log_name: original

@@ -77,10 +77,10 @@ def generate_config(trial):
     weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=True)
     dropout = trial.suggest_float("dropout", 0, 1)
 
-    name = f"lr{lr:.4f}-decay{weight_decay:.4f}"
+    name = f"lr{lr:.4f}-decay{weight_decay:.4f}-dropout{dropout:.4f}"
     new_config["learning_rate"] = lr
     new_config["weight_decay"] = weight_decay
-    new_config["model_config"]["dropout"] = dropout
+    new_config["model"]["p_dropout"] = dropout
 
     new_config["logger"]["log_folder"] = LOG_FOLDER
     new_config["logger"]["log_name"] = name
@@ -119,11 +119,15 @@ def save_best_on_val_callbacks(study, frozen_trial):
 
 
 def main():
+    sampler = optuna.samplers.TPESampler(
+        seed=2023
+    )  # Make the sampler behave in a deterministic way.
     study = optuna.create_study(
         "sqlite:///db-deepfm.sqlite3",
         study_name=RUN_NAME,
         direction="maximize",
         load_if_exists=True,
+        sampler=sampler,
     )
 
     study.optimize(objective, 30, callbacks=[save_best_on_val_callbacks])
