@@ -1,0 +1,149 @@
+""" Target is to compare multiple hash function under various hyper parameters """
+import argparse
+import copy
+import os
+import shutil
+import subprocess
+import tempfile
+
+import optuna
+import torch
+import train_deepfm
+import yaml
+from loguru import logger
+
+DEFAULT_BASE_CONFIG_PATH = "../configs/deepfm/base_config.yaml"
+DEFAULT_BASE_CONFIG_PATH = os.path.join(
+    os.path.dirname(__file__), DEFAULT_BASE_CONFIG_PATH
+)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--base_config", default=DEFAULT_BASE_CONFIG_PATH)
+    parser.add_argument(
+        "--log_folder",
+        "-l",
+        default=None,
+        help="Folder to save all of logs, default: filename of config without ext",
+    )
+    parser.add_argument(
+        "--run_name",
+        "-n",
+        default=None,
+        help="Run name, default: basename of log_folder",
+    )
+    args = parser.parse_args()
+
+    logger.debug(args)
+    if args.log_folder is None:
+        name = os.path.basename(args.base_config)
+        name, _ = os.path.splitext(name)
+
+        args.log_folder = name
+
+    if args.run_name is None:
+        log_folder = args.log_folder
+        if log_folder.endswith("/"):
+            log_folder = log_folder.rstrip("/")
+
+        name = os.path.basename(log_folder)
+        args.run_name = name
+
+    return args
+
+
+args = parse_args()
+# input variable
+BASE_CONFIG = args.base_config
+LOG_FOLDER = args.log_folder
+
+RUN_NAME = args.run_name
+
+
+with open(BASE_CONFIG) as fin:
+    base_config = yaml.safe_load(fin)
+
+CHECKPOINT_PATH = base_config["checkpoint_path"]
+BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
+
+
+def generate_config(trial):
+    """Generate a config yaml from trial"""
+
+    new_config = copy.deepcopy(base_config)
+
+    lr = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=True)
+    dropout = trial.suggest_float("dropout", 0, 1)
+
+    name = f"lr{lr:.4f}-decay{weight_decay:.4f}-dropout{dropout:.4f}"
+    new_config["learning_rate"] = lr
+    new_config["weight_decay"] = weight_decay
+    new_config["model"]["p_dropout"] = dropout
+
+    new_config["logger"]["log_folder"] = LOG_FOLDER
+    new_config["logger"]["log_name"] = name
+    return new_config
+
+
+def objective(trial: optuna.Trial):
+    new_config = generate_config(trial)
+
+    name = new_config["logger"]["log_name"]
+    logger.info(name)
+
+    # Using subprocess to remove torch cuda allocated memory
+    tmp_file = tempfile.mktemp()
+    with open(tmp_file, "w") as fout:
+        yaml.dump(new_config, fout)
+
+    subprocess.run(["python", train_deepfm.__file__, tmp_file])
+
+    torch.cuda.empty_cache()
+
+    checkpoint_path = new_config["checkpoint_path"]
+
+    metrics = torch.load(checkpoint_path, map_location="cpu")["val_metrics"]
+    return metrics["auc"]
+
+
+def save_best_on_val_callbacks(study, frozen_trial):
+    previous_best_value = study.user_attrs.get("previous_best_value", None)
+    if previous_best_value != study.best_value:
+        study.set_user_attr("previous_best_value", study.best_value)
+        shutil.copy(CHECKPOINT_PATH, BEST_CHECKPOINT_PATH)
+
+        with open("configs/best-trial.yaml", "w") as fout:
+            yaml.dump(generate_config(frozen_trial), fout)
+
+
+def main():
+    sampler = optuna.samplers.TPESampler(
+        seed=2023
+    )  # Make the sampler behave in a deterministic way.
+    study = optuna.create_study(
+        "sqlite:///db-deepfm.sqlite3",
+        study_name=RUN_NAME,
+        direction="maximize",
+        load_if_exists=True,
+        sampler=sampler,
+    )
+
+    study.optimize(objective, 30, callbacks=[save_best_on_val_callbacks])
+    trial = study.best_trial
+
+    logger.info(trial.params)
+    best_config = generate_config(trial)
+
+    # Get test accuracy
+    best_config["run_test"] = True
+    best_config["checkpoint_path"] = BEST_CHECKPOINT_PATH
+    with open("configs/best-trial.yaml", "w") as fout:
+        yaml.dump(best_config, fout)
+
+    train_deepfm.main(["configs/best-trial.yaml"])
+
+
+if __name__ == "__main__":
+    main()
