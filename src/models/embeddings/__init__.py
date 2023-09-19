@@ -7,7 +7,7 @@ from .base import IEmbedding, VanillaEmbedding
 from .deepfm_opt_embed import OptEmbed as DeepFMOptEmbed
 from .deepfm_opt_embed import RetrainOptEmbed as DeepFMRetrainOptEmbed
 from .dh_embedding import DHEmbedding
-from .lightgcn_opt_embed import OptEmbed
+from .lightgcn_opt_embed import OptEmbed, RetrainOptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
 from .tensortrain_embeddings import TTEmbedding
@@ -19,7 +19,9 @@ NAME_TO_CLS = {
     "pep": PepEmbeeding,
     "pep_retrain": RetrainPepEmbedding,
     "optembed_d": OptEmbed,  # will only use mask D
+    "optembed_d_retrain": RetrainOptEmbed,  # will only use mask D
     "optembed": OptEmbed,
+    "optembed_retrain": RetrainOptEmbed,
     "deepfm_optembed": DeepFMOptEmbed,
     "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
     "tt_emb": TTEmbedding,
@@ -52,7 +54,7 @@ def get_embedding(
     else:
         if name.startswith("pep"):
             embedding_config["field_name"] = field_name
-        if name == "optembed_d":
+        if name == "optembed_d" or name == "optembed_d_retrain":
             embedding_config["t_init"] = None
             logger.debug("OptEmbed Mask E is disabled before creating")
 

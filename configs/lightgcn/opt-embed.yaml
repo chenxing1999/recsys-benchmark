@@ -5,6 +5,7 @@ model:
   p_dropout: 0.0
   embedding_config:
     name: optembed_d
+    mode_threshold_d: feature
 
 train_dataloader:
   dataset:

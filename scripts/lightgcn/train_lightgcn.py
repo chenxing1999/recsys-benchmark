@@ -112,7 +112,8 @@ def main(argv: Optional[Sequence[str]] = None):
         mask = info["mask"]
         keys = model.load_state_dict(info["full"], False)
         assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
-        model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
+        model.item_emb_table.init_mask(mask_d=mask["item"]["mask_d"], mask_e=None)
+        model.user_emb_table.init_mask(mask_d=mask["user"]["mask_d"], mask_e=None)
 
     if torch.cuda.is_available():
         device = "cuda"

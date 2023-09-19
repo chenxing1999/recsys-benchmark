@@ -619,8 +619,7 @@ class RetrainOptEmbed(IOptEmbed):
         return self._mask
 
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):
-        if self._mask is None:
-            self.init_mask()
+        assert self._mask is not None, "Mask is not initialized"
 
         self._cur_weight = self._weight * self._mask
         return self._cur_weight

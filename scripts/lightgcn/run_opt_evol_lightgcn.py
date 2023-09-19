@@ -99,6 +99,14 @@ def main(argv: Optional[Sequence[str]] = None):
 
     print("Sparsity", 1 - nnz / total_element)
 
+    init_weight_path = config["opt_embed"]["init_weight_path"]
+    info = torch.load(init_weight_path)
+    info["mask"] = {
+        "item": {"mask_d": best_item_mask},
+        "user": {"mask_e": best_user_mask},
+    }
+    torch.save(info, init_weight_path)
+
 
 if __name__ == "__main__":
     result = main()

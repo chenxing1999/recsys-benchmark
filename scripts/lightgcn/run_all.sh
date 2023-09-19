@@ -16,5 +16,23 @@ python scripts/lightgcn/exp_find_hparams.py -c configs/lightgcn/qr-5.yaml -l log
 # supernet
 python scripts/lightgcn/exp_find_hparams.py -c configs/lightgcn/opt-embed.yaml -l logs/opt-embed -p checkpoints/lightgcn/opt-embed.pth
 # evol
-python scripts/lightgcn/run_opt_evol_lightgcn.py
+cp checkpoints/lightgcn/opt-embed.pth checkpoints/checkpoint.pth
+cp configs/best-trial.yaml configs/best-opt-embed-super.yaml
+python scripts/lightgcn/run_opt_evol_lightgcn.py configs/lightgcn/opt-embed.yaml
+
 # retrain
+python scripts/generate_retrain_config.py configs/best-opt-embed-super.yaml configs/opt-embed-retrain.yaml
+python scripts/lightgcn/train_lightgcn.py configs/lightgcn/opt-embed-retrain.yaml
+
+
+# PEP------
+
+
+# L2
+
+
+
+# TT-Rec
+python scripts/exp_find_hparams.py -c configs/lightgcn/tt-emb-96-96.yaml -l logs/lightgcn/tt-emb-96-96 -p checkpoints/lightgcn/tt-emb-96-96.pth
+# DHE
+# Quantization
