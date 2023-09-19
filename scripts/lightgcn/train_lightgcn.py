@@ -194,6 +194,8 @@ def main(argv: Optional[Sequence[str]] = None):
                     "state_dict": model.state_dict(),
                     "model_config": model_config,
                     "val_metrics": val_metrics,
+                    "num_users": train_dataset.num_users,
+                    "num_items": train_dataset.num_items,
                 }
                 torch.save(checkpoint, config["checkpoint_path"])
             elif warmup <= epoch_idx:

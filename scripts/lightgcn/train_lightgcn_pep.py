@@ -244,6 +244,8 @@ def _main(trial: optuna.Trial, base_config: Dict):
                     "state_dict": model.state_dict(),
                     "model_config": model_config,
                     "val_metrics": val_metrics,
+                    "num_users": num_users,
+                    "num_items": num_items,
                 }
                 torch.save(checkpoint, config["checkpoint_path"])
 
