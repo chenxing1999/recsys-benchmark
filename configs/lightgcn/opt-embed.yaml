@@ -41,7 +41,7 @@ enable_profile: false
 
 # Opt Specific config
 opt_embed:
-  init_weight_path: checkpoints/opt/initial.pth
+  init_weight_path: checkpoints/lightgcn/initial-optembed.pth
   t_param_lr: 0.0001
   alpha: 0.0001
 

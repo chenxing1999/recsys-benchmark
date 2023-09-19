@@ -13,4 +13,8 @@ python scripts/lightgcn/exp_find_hparams.py -c configs/lightgcn/qr-2.yaml -l log
 python scripts/lightgcn/exp_find_hparams.py -c configs/lightgcn/qr-5.yaml -l logs/qr-5 -p checkpoints/lightgcn/qr-5.pth
 
 # OptEmbed----------------------
-python scripts/lightgcn/exp_find_hparams.py
+# supernet
+python scripts/lightgcn/exp_find_hparams.py -c configs/lightgcn/opt-embed.yaml -l logs/opt-embed -p checkpoints/lightgcn/opt-embed.pth
+# evol
+python scripts/lightgcn/run_opt_evol_lightgcn.py
+# retrain
