@@ -29,3 +29,26 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
     torch.manual_seed(seed)
     random.seed(seed)
+
+
+def get_size_tensor(tensor: torch.Tensor) -> int:
+    """Return memory size of tensor in bytes"""
+    # Note: Tensor.is_sparse return False for tensor.is_sparse_csr
+    if tensor.layout == torch.strided:
+        return tensor.element_size() * tensor.nelement()
+    elif tensor.layout == torch.sparse_csr:
+        size = get_size_tensor(tensor.values())
+        size += get_size_tensor(tensor.crow_indices())
+        size += get_size_tensor(tensor.col_indices())
+        return size
+    elif tensor.layout == torch.sparse_coo:
+        size = get_size_tensor(tensor.values())
+        size += get_size_tensor(tensor.indices())
+        return size
+    elif tensor.layout == torch.sparse_bsr:
+        size = get_size_tensor(tensor.values())
+        size += get_size_tensor(tensor.crow_indices())
+        size += get_size_tensor(tensor.col_indices())
+        return size
+    else:
+        raise NotImplementedError()
