@@ -18,9 +18,12 @@ from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
 from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
 from src.trainer.lightgcn import train_epoch, validate_epoch
+from src.utils import set_seed
+
+set_seed(2023)
 
 IPepEmbedding = Union[PepEmbeeding, RetrainPepEmbedding]
-N_TRIALS = 30
+N_TRIALS = 100
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -319,11 +322,15 @@ def main(argv=None):
     base_config = get_config(argv)
     objective = partial(lambda trial: _main(trial, base_config))
     callback = Callback(base_config)
+    sampler = optuna.samplers.NSGAIISampler(
+        seed=2023
+    )  # Make the sampler behave in a deterministic way.
     study = optuna.create_study(
         "sqlite:///db-pep.sqlite3",
         study_name="pep",
         directions=["maximize", "maximize"],
         load_if_exists=True,
+        sampler=sampler,
     )
 
     _validate_config(base_config)
