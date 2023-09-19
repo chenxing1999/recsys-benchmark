@@ -97,6 +97,23 @@ def main(argv: Optional[Sequence[str]] = None):
         model_config,
     )
 
+    # opt_embed specific code
+    is_retrain = "retrain" in model_config["embedding_config"]["name"]
+    if "opt_embed" in config and not is_retrain:
+        init_weight_path = config["opt_embed"]["init_weight_path"]
+        torch.save(
+            {
+                "full": model.state_dict(),
+            },
+            config["opt_embed"]["init_weight_path"],
+        )
+    else:
+        info = torch.load(init_weight_path)
+        mask = info["mask"]
+        keys = model.load_state_dict(info["full"], False)
+        assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
+        model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
+
     if torch.cuda.is_available():
         device = "cuda"
     else:
