@@ -1,5 +1,7 @@
 from typing import Dict
 
+import torch
+
 from .base import IGraphBaseCore
 from .hccf import HCCFModelCore
 from .lightgcn import LightGCN
@@ -25,4 +27,16 @@ def get_graph_model(
 
     model_config["name"] = name
 
+    return model
+
+
+def load_graph_model(checkpoint_path: str) -> IGraphBaseCore:
+    """Load checkpoint to correct model"""
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    num_users = checkpoint["num_users"]
+    num_items = checkpoint["num_items"]
+    model_config = checkpoint["model_config"]
+
+    model = get_graph_model(num_users, num_items, model_config)
+    model.load_state_dict(checkpoint["state_dict"])
     return model
