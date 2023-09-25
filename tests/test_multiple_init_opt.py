@@ -13,6 +13,9 @@ with open(BASE_CONFIG_PATH) as fin:
 
 
 TRAIN_SCRIPT = os.path.join(TEST_FOLDER, "../scripts/lightgcn/train_lightgcn.py")
+HIDDEN_SIZE = 64
+NUM_USER = 101
+NUM_ITEM = 77
 
 
 def test_multiple_init_for_opt():
@@ -36,6 +39,16 @@ def test_multiple_init_for_opt():
         subprocess.run(["python", TRAIN_SCRIPT, tmp_config])
 
         checkpoint = torch.load(init_weight_path)
+        checkpoint["mask"] = {"user": {}, "item": {}}
+        checkpoint["mask"]["user"]["mask_d"] = torch.randint(
+            HIDDEN_SIZE, size=(NUM_USER,)
+        )
+        checkpoint["mask"]["item"]["mask_d"] = torch.randint(
+            HIDDEN_SIZE, size=(NUM_ITEM,)
+        )
+        torch.save(checkpoint, init_weight_path)
+
+        config["model"]["embedding_config"]["name"] = "optembed_d_retrain"
 
         subprocess.run(["python", TRAIN_SCRIPT, tmp_config])
         checkpoint2 = torch.load(init_weight_path)

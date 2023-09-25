@@ -20,6 +20,7 @@ DEFAULT_BASE_CONFIG_PATH = "../configs/lightgcn_config.yaml"
 DEFAULT_BASE_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__), DEFAULT_BASE_CONFIG_PATH
 )
+DEFAULT_BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
 
 
 def parse_args():
@@ -42,6 +43,12 @@ def parse_args():
         action="store_true",
         help="Disable SGL-WA backbone or not. Default: False",
     )
+    parser.add_argument(
+        "--best_checkpoint_path",
+        "-p",
+        default=DEFAULT_BEST_CHECKPOINT_PATH,
+        help="Path to best checkpoint path",
+    )
     args = parser.parse_args()
 
     logger.debug(args)
@@ -59,6 +66,8 @@ def parse_args():
         name = os.path.basename(log_folder)
         args.run_name = name
 
+    hparams_log_path = os.path.join(args.log_folder, "log")
+    logger.add(hparams_log_path)
     setattr(args, "enable_sgl_wa", not args.disable_sgl_wa)
 
     return args
@@ -77,7 +86,7 @@ with open(BASE_CONFIG) as fin:
     base_config = yaml.safe_load(fin)
 
 CHECKPOINT_PATH = base_config["checkpoint_path"]
-BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
+BEST_CHECKPOINT_PATH = args.best_checkpoint_path
 
 
 def generate_config(trial):

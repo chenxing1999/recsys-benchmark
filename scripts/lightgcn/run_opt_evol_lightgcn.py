@@ -11,6 +11,9 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import get_graph_model
 from src.models.embeddings.lightgcn_opt_embed import evol_search_lightgcn
+from src.utils import set_seed
+
+set_seed(2023)
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -93,11 +96,20 @@ def main(argv: Optional[Sequence[str]] = None):
         target_sparsity=None,
         naive=False,
     )
-    nnz = best_item_mask.sum() + best_user_mask.sum()
+    nnz = (best_item_mask + 1).sum() + (best_user_mask + 1).sum()
     total_element = len(best_item_mask) + len(best_user_mask)
     total_element *= model.item_emb_table._hidden_size
 
     print("Sparsity", 1 - nnz / total_element)
+    print("best ndcg", best_ndcg)
+
+    init_weight_path = config["opt_embed"]["init_weight_path"]
+    info = torch.load(init_weight_path)
+    info["mask"] = {
+        "item": {"mask_d": best_item_mask},
+        "user": {"mask_d": best_user_mask},
+    }
+    torch.save(info, init_weight_path)
 
 
 if __name__ == "__main__":
