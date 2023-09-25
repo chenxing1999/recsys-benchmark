@@ -44,8 +44,8 @@ def parse_args():
         help="Disable SGL-WA backbone or not. Default: False",
     )
     parser.add_argument(
-        "--best_checkpoint_path", 
-        "-p", 
+        "--best_checkpoint_path",
+        "-p",
         default=DEFAULT_BEST_CHECKPOINT_PATH,
         help="Path to best checkpoint path",
     )
