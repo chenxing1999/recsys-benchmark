@@ -128,8 +128,7 @@ class OptEmbed(IOptEmbed):
         emb = self._mask_e_module(self._weight)
 
         if not self.training and mask_d is None:
-            self._cur_weight = emb
-            return self._cur_weight
+            return emb
 
         if self.training:
             if mask_d is None:
@@ -156,7 +155,7 @@ class OptEmbed(IOptEmbed):
             elif isinstance(mask_d, torch.LongTensor):
                 mask_d = F.embedding(mask_d, self._full_mask_d)
 
-            self._cur_weight = emb * mask_d
+            return emb * mask_d
         else:
             if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
                 mask_d = mask_d.to(device)
@@ -171,9 +170,8 @@ class OptEmbed(IOptEmbed):
 
                 mask_d = F.embedding(mask_d, self._full_mask_d)
             mask_d = mask_d.to(self._weight)
-            self._cur_weight = emb * mask_d
 
-        return self._cur_weight
+        return emb * mask_d
 
     def forward(self, x, mask_d=None):
         """
@@ -186,14 +184,18 @@ class OptEmbed(IOptEmbed):
                     directly used as a mask
         """
         # Creating self._cur_weight
-        if self._cur_weight is None:
-            self.get_weight(mask_d)
+        if not self.training:
+            if self._cur_weight is None:
+                self._cur_weight = self.get_weight(mask_d)
+            weight = self._cur_weight
+        else:
+            weight = self.get_weight(mask_d)
 
         mode = self._mode
         if mode is None:
-            return F.embedding(x, self._cur_weight)
+            return F.embedding(x, weight)
         else:
-            return F.embedding_bag(x, self._cur_weight, mode=mode)
+            return F.embedding_bag(x, weight, mode=mode)
 
     def get_sparsity(self, get_n_params=False):
         emb = self._mask_e_module(self._weight)
@@ -524,6 +526,7 @@ class RetrainOptEmbed(IOptEmbed):
         self._num_item = self._field_dims.sum()
         self._num_field = len(field_dims)
         self._hidden_size = hidden_size
+        self._mode = mode
 
         self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
         self._cur_weight = None
@@ -544,7 +547,9 @@ class RetrainOptEmbed(IOptEmbed):
 
         self._mask_d = None
         self._mask_e = None
-        self._mask = None
+        self._mask = nn.Parameter(
+            torch.empty(self._num_item, hidden_size), requires_grad=False
+        )
         self._sparsity = 0
 
     def init_mask(self, mask_e, mask_d):
