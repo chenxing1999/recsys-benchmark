@@ -99,7 +99,8 @@ def main(argv: Optional[Sequence[str]] = None):
 
     # opt_embed specific code
     is_retrain = "retrain" in model_config["embedding_config"]["name"]
-    if "opt_embed" in config and not is_retrain:
+    is_opt_embed = "opt_embed" in config
+    if is_opt_embed and not is_retrain:
         init_weight_path = config["opt_embed"]["init_weight_path"]
         torch.save(
             {
@@ -107,11 +108,19 @@ def main(argv: Optional[Sequence[str]] = None):
             },
             config["opt_embed"]["init_weight_path"],
         )
-    else:
+    elif is_opt_embed:
+        init_weight_path = config["opt_embed"]["init_weight_path"]
         info = torch.load(init_weight_path)
         mask = info["mask"]
         keys = model.load_state_dict(info["full"], False)
-        assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
+        length_miss = len(keys[0])
+        expected_miss = sum(
+            1
+            for key in keys[0]
+            if key in ["user_emb_table._mask", "item_emb_table._mask"]
+        )
+        length_miss = length_miss - expected_miss
+        assert length_miss == 0, f"There are some keys missing: {keys[0]}"
         model.item_emb_table.init_mask(mask_d=mask["item"]["mask_d"], mask_e=None)
         model.user_emb_table.init_mask(mask_d=mask["user"]["mask_d"], mask_e=None)
 
@@ -199,8 +208,10 @@ def main(argv: Optional[Sequence[str]] = None):
                     "num_items": train_dataset.num_items,
                 }
                 torch.save(checkpoint, config["checkpoint_path"])
+                early_stop_count = 0
             elif warmup <= epoch_idx:
                 early_stop_count += 1
+                logger.debug(f"{early_stop_count=}")
 
                 if early_stop_config and early_stop_count > early_stop_config:
                     return
