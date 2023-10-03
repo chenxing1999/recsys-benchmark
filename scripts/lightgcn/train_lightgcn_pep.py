@@ -58,6 +58,9 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     pep_config = base_config["pep_config"]
     if not pep_config["is_retrain"]:
         new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
+        new_config["pep_config"]["weight_decay"] = trial.suggest_float(
+            "pep_weight_decay", 1e-5, 1e-2, log=True
+        )
 
     # new_config["logger"]["log_folder"] = LOG_FOLDER
     new_config["logger"]["log_name"] = name
@@ -164,9 +167,11 @@ def _main(trial: optuna.Trial, base_config: Dict):
 
         return
 
+    weight_decay = config["pep_config"]["weight_decay"]
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config["learning_rate"],
+        weight_decay=weight_decay,
     )
 
     num_params = 0
