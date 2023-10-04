@@ -4,13 +4,13 @@ import copy
 import os
 import shutil
 from functools import partial
-from typing import Dict, Optional, Sequence, Union, Tuple
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import loguru
-from loguru import logger as loguru_logger
 import optuna
 import torch
 import yaml
+from loguru import logger as loguru_logger
 from torch.utils.data import DataLoader
 
 from src import metrics
@@ -47,7 +47,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         help="Optimize only ndcg",
     )
     parser.add_argument(
-        "--n-trials", 
+        "--n-trials",
         type=int,
         default=30,
         help="Num trials to run",
@@ -71,7 +71,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
 
     hparams_log_path = os.path.join(args.log_folder, "log")
     loguru_logger.add(hparams_log_path)
-
 
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
@@ -104,9 +103,7 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     pep_config = base_config["pep_config"]
     if not pep_config["is_retrain"]:
         new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
-        pep_weight_decay = trial.suggest_float(
-            "pep_weight_decay", 1e-5, 1, log=True
-        )
+        pep_weight_decay = trial.suggest_float("pep_weight_decay", 1e-5, 1, log=True)
 
         new_config["pep_config"]["weight_decay"] = pep_weight_decay
         name += f"threshold{init_threshold:.4f}-t_decay{pep_weight_decay:.4f}"
@@ -218,18 +215,17 @@ def _main(trial: optuna.Trial, base_config: Dict):
 
     ps = [
         # threshold
-        {"params": [], "weight_decay": config["pep_config"]["weight_decay"]}, 
+        {"params": [], "weight_decay": config["pep_config"]["weight_decay"]},
         # non-threshold
         {
-            "params": [], 
-        }
+            "params": [],
+        },
     ]
     for name, p in model.named_parameters():
         if name.endswith(".s"):
             ps[0]["params"].append(p)
         else:
             ps[1]["params"].append(p)
-
 
     optimizer = torch.optim.Adam(
         ps,
@@ -396,16 +392,19 @@ class Callback(object):
 def constraint(trial: optuna.Trial) -> Sequence[float]:
     """Constraint function in Optuna format, value > 0 means constraint is violated"""
     if trial.user_attrs["achieved_target"]:
-        return [-1.]
+        return [-1.0]
     else:
-        return [1.]
+        return [1.0]
+
 
 def main(argv=None):
     base_config, args = parse_args(argv)
 
     callback = Callback(base_config, args)
     if args.use_tpe:
-        objective = partial(lambda base_config, trial: _main(trial, base_config)[0], base_config)
+        objective = partial(
+            lambda base_config, trial: _main(trial, base_config)[0], base_config
+        )
         sampler = optuna.samplers.TPESampler(
             seed=2023,
             constraints_func=constraint,
@@ -416,7 +415,9 @@ def main(argv=None):
             seed=2023,
             constraints_func=constraint,
         )  # Make the sampler behave in a deterministic way.
-        objective = partial(lambda trial: _main(trial, base_config), base_config=base_config)
+        objective = partial(
+            lambda trial: _main(trial, base_config), base_config=base_config
+        )
         kwargs = {"directions": ["maximize", "maximize"]}
 
     study = optuna.create_study(
