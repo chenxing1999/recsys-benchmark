@@ -7,14 +7,15 @@ model:
     name: pep
     ori_weight_dir: "checkpoints/pep_ori"
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
-    init_threshold: -6.5
+    init_threshold: -30
 
 pep_config:
-  target_sparsity: 0.7
+  target_sparsity: 0.5
   best_checkpoint_dir: checkpoints/best_pep
   model_init_path: checkpoints/model_pep_init.pth
-  is_retrain: True
+  is_retrain: False
   trial_checkpoint: checkpoints/pep_trial
+  pep_weight_decay: 0.01
 
 train_dataloader:
   dataset:
@@ -39,7 +40,7 @@ test_dataloader:
 run_test: false
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 20
+num_epochs: 40
 log_step: 100
 
 weight_decay: 0.001
