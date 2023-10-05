@@ -1,11 +1,11 @@
 """Define training and evaluating logic for LightGCN"""
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Optional, Set, Union
 
 import torch
 from loguru import logger
 from torch.utils.data import DataLoader
 
-from src import metrics
+from src import metrics as metric_utils
 from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore
@@ -112,6 +112,7 @@ def validate_epoch(
     k=20,
     filter_item_on_train=True,
     profiler=None,
+    metrics: Optional[List[str]] = None,
 ) -> Dict[str, float]:
     """Validate single epoch performance
 
@@ -122,6 +123,8 @@ def validate_epoch(
         device
         k
         filter_item_on_train: Remove item that user already interacted on train
+
+        metrics: Only support `ndcg` and `recall`
     Returns:
         "ndcg"
     """
@@ -162,7 +165,19 @@ def validate_epoch(
         if profiler:
             profiler.step()
 
-    ndcg = metrics.get_ndcg(all_y_pred, all_y_true)
-    return {
-        "ndcg": ndcg,
-    }
+    if metrics is None:
+        ndcg = metric_utils.get_ndcg(all_y_pred, all_y_true, k)
+        return {
+            "ndcg": ndcg,
+        }
+    elif "ndcg" in metrics and "recall" in metrics:
+        ndcg, recall = metric_utils.get_ndcg_recall(all_y_pred, all_y_true, k)
+        return {
+            "ndcg": ndcg,
+            "recall": recall,
+        }
+    else:
+        ndcg = metric_utils.get_ndcg(all_y_pred, all_y_true, k)
+        return {
+            "ndcg": ndcg,
+        }

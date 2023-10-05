@@ -80,7 +80,9 @@ def main(argv: Optional[Sequence[str]] = None):
         state = prune(model.state_dict(), prune_ratio)
         model.load_state_dict(state)
 
-    val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
+    val_metrics = validate_epoch(
+        train_dataset, val_dataloader, model, device, metrics=["ndcg", "recall"]
+    )
     for key, value in val_metrics.items():
         logger.info(f"{key} - {value:.4f}")
 
