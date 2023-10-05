@@ -81,7 +81,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
     else:
         config["force"] = False
 
-
     return config, args
 
 
@@ -154,7 +153,6 @@ def init_profiler(config: Dict):
 
 
 def _main(trial: optuna.Trial, base_config: Dict):
-
     # Not support other config besides pep config
     if base_config["force"]:
         # n-trials = 0
@@ -162,7 +160,6 @@ def _main(trial: optuna.Trial, base_config: Dict):
     else:
         config = generate_config(trial, base_config)
     logger = Logger(**config["logger"])
-
 
     # Loading train dataset
     logger.info("Load train dataset...")
