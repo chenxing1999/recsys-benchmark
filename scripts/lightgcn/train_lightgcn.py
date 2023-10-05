@@ -133,7 +133,9 @@ def main(argv: Optional[Sequence[str]] = None):
         checkpoint = torch.load(config["checkpoint_path"])
         model.load_state_dict(checkpoint["state_dict"], strict=False)
 
-        val_metrics = validate_epoch(train_dataset, val_dataloader, model, device)
+        val_metrics = validate_epoch(
+            train_dataset, val_dataloader, model, device, metrics=["recall", "ndcg"]
+        )
         for key, value in val_metrics.items():
             logger.info(f"{key} - {value:.4f}")
 
