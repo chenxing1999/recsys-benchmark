@@ -4,12 +4,13 @@ import copy
 import os
 import shutil
 from functools import partial
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import loguru
 import optuna
 import torch
 import yaml
+from loguru import logger as loguru_logger
 from torch.utils.data import DataLoader
 
 from src import metrics
@@ -23,16 +24,64 @@ from src.utils import set_seed
 set_seed(2023)
 
 IPepEmbedding = Union[PepEmbeeding, RetrainPepEmbedding]
-N_TRIALS = 100
 
 
-def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
+def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Namespace]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
+    parser.add_argument(
+        "--log_folder",
+        "-l",
+        default=None,
+        help="Folder to save all of logs, default: filename of config without ext",
+    )
+    parser.add_argument(
+        "--run_name",
+        "-n",
+        default=None,
+        help="Run name, default: basename of log_folder",
+    )
+    parser.add_argument(
+        "--use-tpe",
+        action="store_true",
+        help="Optimize only ndcg",
+    )
+    parser.add_argument(
+        "--n-trials",
+        type=int,
+        default=30,
+        help="Num trials to run. 0 to use base config",
+    )
+
     args = parser.parse_args(argv)
+    loguru_logger.debug(args)
+    if args.log_folder is None:
+        name = os.path.basename(args.config_file)
+        name, _ = os.path.splitext(name)
+
+        args.log_folder = name
+
+    if args.run_name is None:
+        log_folder = args.log_folder
+        if log_folder.endswith("/"):
+            log_folder = log_folder.rstrip("/")
+
+        name = os.path.basename(log_folder)
+        args.run_name = name
+
+    hparams_log_path = os.path.join(args.log_folder, "log")
+    loguru_logger.add(hparams_log_path)
+
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
-    return config
+
+    config["logger"]["log_folder"] = args.log_folder
+    if args.n_trials == 0:
+        config["force"] = True
+    else:
+        config["force"] = False
+
+    return config, args
 
 
 def generate_config(trial, base_config, enable_sgl_wa=True):
@@ -43,9 +92,9 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=False)
     weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=False)
     num_layers = trial.suggest_int("num_layers", 1, 4)
-    init_threshold = trial.suggest_float("init_threshold", -10, -5, step=0.1)
+    init_threshold = trial.suggest_float("init_threshold", -50, -5, step=0.1)
 
-    name = f"lr{lr:.4f}-decay{weight_decay:.4f}-num_layers{num_layers}"
+    name = f"lr{lr:.4f}-decay{weight_decay:.4f}-layers{num_layers}"
     if enable_sgl_wa:
         info_nce = trial.suggest_float("info_nce_weight", 0, 1, step=0.05)
         new_config["info_nce_weight"] = info_nce
@@ -58,6 +107,10 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     pep_config = base_config["pep_config"]
     if not pep_config["is_retrain"]:
         new_config["model"]["embedding_config"]["init_threshold"] = init_threshold
+        pep_weight_decay = trial.suggest_float("pep_weight_decay", 1e-5, 1, log=True)
+
+        new_config["pep_config"]["weight_decay"] = pep_weight_decay
+        name += f"threshold{init_threshold:.4f}-t_decay{pep_weight_decay:.4f}"
 
     # new_config["logger"]["log_folder"] = LOG_FOLDER
     new_config["logger"]["log_name"] = name
@@ -100,11 +153,13 @@ def init_profiler(config: Dict):
 
 
 def _main(trial: optuna.Trial, base_config: Dict):
-    config = generate_config(trial, base_config)
-    logger = Logger(**config["logger"])
-
     # Not support other config besides pep config
-    config = generate_config(trial, config)
+    if base_config["force"]:
+        # n-trials = 0
+        config = copy.deepcopy(base_config)
+    else:
+        config = generate_config(trial, base_config)
+    logger = Logger(**config["logger"])
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -164,8 +219,22 @@ def _main(trial: optuna.Trial, base_config: Dict):
 
         return
 
+    ps = [
+        # threshold
+        {"params": [], "weight_decay": config["pep_config"]["weight_decay"]},
+        # non-threshold
+        {
+            "params": [],
+        },
+    ]
+    for name, p in model.named_parameters():
+        if name.endswith(".s"):
+            ps[0]["params"].append(p)
+        else:
+            ps[1]["params"].append(p)
+
     optimizer = torch.optim.Adam(
-        model.parameters(),
+        ps,
         lr=config["learning_rate"],
     )
 
@@ -263,11 +332,6 @@ def _main(trial: optuna.Trial, base_config: Dict):
                 sparsity = (num_users * user_sparsity + num_items * item_sparsity) / (
                     num_users + num_items
                 )
-                if epoch_idx == 1 and sparsity < 0.01:
-                    raise optuna.TrialPruned()
-                elif epoch_idx == 5:
-                    if sparsity < 0.4 or best_ndcg < 0.002:
-                        raise optuna.TrialPruned()
 
                 # Check if sparsity is low enough and save result mask
                 model.item_emb_table.train_callback()
@@ -279,6 +343,7 @@ def _main(trial: optuna.Trial, base_config: Dict):
                     torch.save(model.user_emb_table.state_dict(), user_path)
                     item_path = os.path.join(trial_checkpoint, "item/target.pth")
                     torch.save(model.item_emb_table.state_dict(), item_path)
+                    break
 
     if config["enable_profile"]:
         train_prof.stop()
@@ -291,12 +356,19 @@ def _main(trial: optuna.Trial, base_config: Dict):
     sparsity = (num_users * user_sparsity + num_items * item_sparsity) / (
         num_users + num_items
     )
+
+    # if sparsity < target_sparsity:
+    #     raise optuna.TrialPruned()
+    trial.set_user_attr("sparsity", sparsity)
+    trial.set_user_attr("achieved_target", achieved_target)
+
     return checkpoint["val_metrics"]["ndcg"], sparsity
 
 
 class Callback(object):
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, args: argparse.Namespace):
         self.config = config
+        self.args = args
 
         pep_config = config["pep_config"]
         self.target_sparsity = pep_config["target_sparsity"]
@@ -307,7 +379,12 @@ class Callback(object):
     def __call__(self, study, frozen_trial):
         if frozen_trial.state == optuna.trial.TrialState.PRUNED:
             return
-        ndcg, sparsity = frozen_trial.values
+        if not self.args.use_tpe:
+            ndcg, sparsity = frozen_trial.values
+        else:
+            ndcg = frozen_trial.value
+            sparsity = frozen_trial.user_attrs["sparsity"]
+
         if sparsity >= self.target_sparsity and ndcg > self._cur_best_metric:
             self._cur_best_metric = ndcg
             if os.path.exists(self._best_checkpoint_path):
@@ -318,19 +395,46 @@ class Callback(object):
             )
 
 
+def constraint(trial: optuna.Trial) -> Sequence[float]:
+    """Constraint function in Optuna format, value > 0 means constraint is violated"""
+    if trial.user_attrs["achieved_target"]:
+        return [-1.0]
+    else:
+        return [1.0]
+
+
 def main(argv=None):
-    base_config = get_config(argv)
-    objective = partial(lambda trial: _main(trial, base_config))
-    callback = Callback(base_config)
-    sampler = optuna.samplers.NSGAIISampler(
-        seed=2023
-    )  # Make the sampler behave in a deterministic way.
+    base_config, args = parse_args(argv)
+
+    callback = Callback(base_config, args)
+    if args.n_trials == 0:
+        _main(optuna.create_trial(value=0), base_config)
+        return
+    if args.use_tpe:
+        objective = partial(
+            lambda base_config, trial: _main(trial, base_config)[0], base_config
+        )
+        sampler = optuna.samplers.TPESampler(
+            seed=2023,
+            constraints_func=constraint,
+        )  # Make the sampler behave in a deterministic way.
+        kwargs = {"direction": "maximize"}
+    else:
+        sampler = optuna.samplers.NSGAIISampler(
+            seed=2023,
+            constraints_func=constraint,
+        )  # Make the sampler behave in a deterministic way.
+        objective = partial(
+            lambda trial: _main(trial, base_config), base_config=base_config
+        )
+        kwargs = {"directions": ["maximize", "maximize"]}
+
     study = optuna.create_study(
         "sqlite:///db-pep.sqlite3",
-        study_name="pep",
-        directions=["maximize", "maximize"],
+        study_name=args.run_name,
         load_if_exists=True,
         sampler=sampler,
+        **kwargs,
     )
 
     _validate_config(base_config)
@@ -338,17 +442,18 @@ def main(argv=None):
 
     logger = loguru.logger
     if not is_retrain:
-        study.enqueue_trial(
-            {
-                "learning_rate": 1e-3,
-                "weight_decay": 1e-3,
-                "init_threshold": -7,
-                "num_layers": 3,
-                "info_nce_weight": 0.1,
-            }
-        )
+        # study.enqueue_trial(
+        #     {
+        #         "learning_rate": 1e-3,
+        #         "weight_decay": 1e-3,
+        #         "init_threshold": -30,
+        #         "num_layers": 3,
+        #         "info_nce_weight": 0.1,
+        #         "pep_weight_decay": 1e-2,
+        #     }
+        # )
 
-        study.optimize(objective, N_TRIALS, callbacks=[callback])
+        study.optimize(objective, args.n_trials, callbacks=[callback])
 
         logger.info("Finished searching for best Pep config")
     else:
