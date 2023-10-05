@@ -50,7 +50,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         "--n-trials",
         type=int,
         default=30,
-        help="Num trials to run",
+        help="Num trials to run. 0 to use base config",
     )
 
     args = parser.parse_args(argv)
@@ -76,6 +76,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         config = yaml.safe_load(fin)
 
     config["logger"]["log_folder"] = args.log_folder
+    if args.n_trials == 0:
+        config["force"] = True
+    else:
+        config["force"] = False
+
 
     return config, args
 
@@ -149,11 +154,15 @@ def init_profiler(config: Dict):
 
 
 def _main(trial: optuna.Trial, base_config: Dict):
-    config = generate_config(trial, base_config)
-    logger = Logger(**config["logger"])
 
     # Not support other config besides pep config
-    config = generate_config(trial, config)
+    if base_config["force"]:
+        # n-trials = 0
+        config = copy.deepcopy(base_config)
+    else:
+        config = generate_config(trial, base_config)
+    logger = Logger(**config["logger"])
+
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -401,6 +410,9 @@ def main(argv=None):
     base_config, args = parse_args(argv)
 
     callback = Callback(base_config, args)
+    if args.n_trials == 0:
+        _main(optuna.create_trial(value=0), base_config)
+        return
     if args.use_tpe:
         objective = partial(
             lambda base_config, trial: _main(trial, base_config)[0], base_config

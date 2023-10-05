@@ -4,16 +4,16 @@ model:
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
-    name: pep
+    name: pep_retrain
     ori_weight_dir: "checkpoints/pep_ori"
-    checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
-    init_threshold: -14
+    checkpoint_weight_dir: "checkpoints/pep_trial/"
+    sparsity: target
 
 pep_config:
   target_sparsity: 0.5
   best_checkpoint_dir: checkpoints/best_pep
   model_init_path: checkpoints/model_pep_init.pth
-  is_retrain: False
+  is_retrain: True
   trial_checkpoint: checkpoints/pep_trial
   weight_decay: 0.05
 
@@ -40,7 +40,7 @@ test_dataloader:
 run_test: false
 
 checkpoint_path: checkpoints/checkpoint.pth
-num_epochs: 100
+num_epochs: 40
 log_step: 100
 
 weight_decay: 0.005
