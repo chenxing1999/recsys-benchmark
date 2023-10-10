@@ -90,7 +90,7 @@ def generate_config(trial, base_config, enable_sgl_wa=True):
     new_config = copy.deepcopy(base_config)
 
     lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=False)
-    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=False)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-1, log=False)
     num_layers = trial.suggest_int("num_layers", 1, 4)
     init_threshold = trial.suggest_float("init_threshold", -50, -5, step=0.1)
 
@@ -359,6 +359,7 @@ def _main(trial: optuna.Trial, base_config: Dict):
 
     # if sparsity < target_sparsity:
     #     raise optuna.TrialPruned()
+    trial.set_user_attr("diff_sparsity", target_sparsity - sparsity)
     trial.set_user_attr("sparsity", sparsity)
     trial.set_user_attr("achieved_target", achieved_target)
 
@@ -397,10 +398,7 @@ class Callback(object):
 
 def constraint(trial: optuna.Trial) -> Sequence[float]:
     """Constraint function in Optuna format, value > 0 means constraint is violated"""
-    if trial.user_attrs["achieved_target"]:
-        return [-1.0]
-    else:
-        return [1.0]
+    return [trial.user_attrs["diff_sparsity"]]
 
 
 def main(argv=None):
@@ -424,9 +422,7 @@ def main(argv=None):
             seed=2023,
             constraints_func=constraint,
         )  # Make the sampler behave in a deterministic way.
-        objective = partial(
-            lambda trial: _main(trial, base_config), base_config=base_config
-        )
+        objective = partial(_main, base_config=base_config)
         kwargs = {"directions": ["maximize", "maximize"]}
 
     study = optuna.create_study(
