@@ -4,7 +4,7 @@ import torch
 
 from .base import IGraphBaseCore
 from .hccf import HCCFModelCore
-from .lightgcn import LightGCN
+from .lightgcn import LightGCN, SingleLightGCN
 
 
 def get_graph_model(
@@ -19,6 +19,7 @@ def get_graph_model(
 
     name_to_cls = {
         "lightgcn": LightGCN,
+        "single-lightgcn": SingleLightGCN,
         "hccf": HCCFModelCore,
     }
     assert name in name_to_cls

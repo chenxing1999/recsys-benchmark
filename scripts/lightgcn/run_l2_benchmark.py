@@ -31,12 +31,20 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
         help="Path to checkpoint path",
         default=None,
     )
+    parser.add_argument(
+        "--use-test-dataset",
+        action="store_true",
+        help="Force using test dataset",
+    )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
 
     if args.checkpoint_path:
         config["checkpoint_path"] = args.checkpoint_path
+
+    if args.use_test_dataset:
+        config["run_test"] = True
     return config, args.prune_ratio
 
 
@@ -85,6 +93,9 @@ def main(argv: Optional[Sequence[str]] = None):
     )
     for key, value in val_metrics.items():
         logger.info(f"{key} - {value:.4f}")
+
+    num_params = sum(torch.nonzero(p).size(0) for p in model.parameters())
+    logger.info(f"Num Params: {num_params}")
 
 
 if __name__ == "__main__":

@@ -10,13 +10,18 @@ class TTEmbedding(IEmbedding):
 
     def __init__(
         self,
-        num_item,
+        field_dims,
         hidden_size: int,
         mode=None,
         **kwargs,
     ):
         assert mode in ["mean", "sum", None], f"{mode} is not supported"
         assert TT_EMB_AVAILABLE, "TT Emb is not available"
+
+        if isinstance(field_dims, int):
+            field_dims = [field_dims]
+
+        num_item = sum(field_dims)
 
         super().__init__()
 
