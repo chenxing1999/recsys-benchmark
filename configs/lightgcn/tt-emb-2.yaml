@@ -1,11 +1,11 @@
 model:
-  name: single-lightgcn # lightgcn,hccf, single-lightgcn
+  name: lightgcn # lightgcn,hccf, single-lightgcn
   num_layers: 3
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
     name: tt_emb
-    tt_ranks: [32, 128, 32]
+    tt_ranks: [32, 128, 64]
     # weight_dist: approx-uniform
     weight_dist: approx-normal
     # weight_dist: orth_init
