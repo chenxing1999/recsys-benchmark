@@ -1,21 +1,21 @@
 model:
   name: lightgcn # lightgcn,hccf
-  num_layers: 4
+  num_layers: 1
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
     name: pep
     ori_weight_dir: "checkpoints/pep_ori"
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
-    init_threshold: -15
+    init_threshold: -30
 
 pep_config:
-  target_sparsity: 0.5
+  target_sparsity: 0.8
   best_checkpoint_dir: checkpoints/best_pep
   model_init_path: checkpoints/model_pep_init.pth
   is_retrain: False
   trial_checkpoint: checkpoints/pep_trial
-  weight_decay: 0.5
+  weight_decay: 0.0004
 
 train_dataloader:
   dataset:
@@ -45,7 +45,7 @@ log_step: 100
 
 weight_decay: 0.07
 # weight_decay: 0.01
-info_nce_weight: 0.5
+info_nce_weight: 0.25
 learning_rate: 0.01
 validate_step: 1
 
@@ -78,4 +78,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/pep-debug/
-  log_name: pep0.5
+  log_name: pep0.8
