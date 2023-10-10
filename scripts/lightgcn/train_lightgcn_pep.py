@@ -401,7 +401,6 @@ def constraint(trial: optuna.Trial) -> Sequence[float]:
     return [trial.user_attrs["diff_sparsity"]]
 
 
-
 def main(argv=None):
     base_config, args = parse_args(argv)
 
