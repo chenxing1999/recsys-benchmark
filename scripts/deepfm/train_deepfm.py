@@ -205,7 +205,7 @@ def main(argv: Optional[Sequence[str]] = None):
                         "state_dict": model.state_dict(),
                         "model_config": model_config,
                         "val_metrics": val_metrics,
-                        "filed_dims": train_dataset.field_dims,
+                        "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
     except KeyboardInterrupt:

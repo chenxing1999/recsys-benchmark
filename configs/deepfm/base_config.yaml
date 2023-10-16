@@ -1,5 +1,5 @@
 model:
-  num_factor: 64
+  num_factor: 16
   hidden_sizes:
     - 400
     - 400
@@ -7,6 +7,7 @@ model:
   p_dropout: 0.5
   embedding_config:
     name: vanilla
+  use_batchnorm: True
 
 train_dataloader:
   dataset:

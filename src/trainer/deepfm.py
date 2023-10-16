@@ -1,3 +1,4 @@
+import datetime
 from typing import Dict
 
 import loguru
@@ -6,6 +7,8 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
 from src.models.deepfm import DeepFM
+
+now = datetime.datetime.now
 
 
 def train_epoch(
@@ -23,7 +26,15 @@ def train_epoch(
     loss_dict = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
+
+    load_data_time = datetime.timedelta()
+    train_time = datetime.timedelta()
+    first_start = start = now()
+
     for idx, batch in enumerate(dataloader):
+        load_data_time += now() - start
+
+        start_train = now()
         inputs, labels = batch
 
         inputs = inputs.to(device)
@@ -54,9 +65,18 @@ def train_epoch(
         if profiler:
             profiler.step()
 
+        end_train = start = now()
+        train_time += end_train - start_train
+
     for metric, value in loss_dict.items():
         avg = value / (idx + 1)
         loss_dict[metric] = avg
+
+    loguru.logger.info(f"train_time: {train_time}")
+    loguru.logger.info(f"load_data_time: {load_data_time}")
+
+    total_time = now() - first_start
+    loguru.logger.info(f"total_time: {total_time}")
 
     return loss_dict
 

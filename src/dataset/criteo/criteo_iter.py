@@ -108,7 +108,7 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
                     feats[i - 1] = feat_mapper[i][line[i]]
 
                 feats = torch.tensor(feats)
-                feats = feats + self.offsets
+                # feats = feats + self.offsets
                 yield feats, label
 
     def pop_info(self):

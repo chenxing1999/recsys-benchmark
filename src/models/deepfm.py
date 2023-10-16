@@ -60,6 +60,15 @@ class DeepFM(nn.Module):
         layers.append(nn.Linear(deep_branch_inp, 1))
         self._deep_branch = nn.Sequential(*layers)
 
+        # torch.set_float32_matmul_precision('high')
+        # self._deep_branch = torch.compile(self._deep_branch)
+
+        field_dims = torch.tensor(field_dims)
+        field_dims = torch.cat([torch.tensor([0], dtype=torch.long), field_dims])
+        offsets = torch.cumsum(field_dims[:-1], 0).unsqueeze(0)
+        self.register_buffer("offsets", offsets)
+
+    # @torch.compile(fullgraph=True)
     def forward(self, x):
         """
         Args:
@@ -69,6 +78,7 @@ class DeepFM(nn.Module):
             scores: torch.FloatTensor (Batch): Logit result before sigmoid
         """
 
+        x = x + self.offsets
         emb = self.embedding(x)
 
         square_of_sum = emb.sum(dim=1).pow(2)
@@ -86,3 +96,12 @@ class DeepFM(nn.Module):
         scores = scores.squeeze(-1)
 
         return scores
+
+    @classmethod
+    def load(cls, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        model_config = checkpoint["model_config"]
+        field_dims = checkpoint["field_dims"]
+
+        model = cls(field_dims, **model_config)
+        return model
