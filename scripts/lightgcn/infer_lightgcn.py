@@ -48,6 +48,7 @@ class Timer:
 def _to_prune(model):
     model.item_emb_table = PrunedEmbedding.from_other_emb(model.item_emb_table)
     model.user_emb_table = PrunedEmbedding.from_other_emb(model.user_emb_table)
+    return model
 
 
 @torch.no_grad()
