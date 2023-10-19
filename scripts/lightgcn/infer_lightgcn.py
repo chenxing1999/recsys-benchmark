@@ -16,10 +16,10 @@ from src.models import get_graph_model
 # Timer = namedtuple("Timer", ["forward", "filter", "topk"])
 @dataclass
 class Timer:
-    forward = 0
-    matching = 0
-    filter_time = 0
-    topk = 0
+    forward = datetime.timedelta()
+    matching = datetime.timedelta()
+    filter_time = datetime.timedelta()
+    topk = datetime.timedelta()
 
     def __repr__(self):
         return (
@@ -62,7 +62,7 @@ def infer(model, norm_adj, user_id, graph, k):
     if is_cuda:
         torch.cuda.synchronize()
     end = datetime.datetime.now()
-    timer.forward = (end - start).microseconds
+    timer.forward = end - start
     start = end
 
     user_emb = user_emb[user_id]
@@ -78,7 +78,7 @@ def infer(model, norm_adj, user_id, graph, k):
     if is_cuda:
         torch.cuda.synchronize()
     end = datetime.datetime.now()
-    timer.matching = (end - start).microseconds
+    timer.matching = end - start
     start = end
 
     scores[ind0, ind1] = float("-inf")
@@ -86,14 +86,14 @@ def infer(model, norm_adj, user_id, graph, k):
     if is_cuda:
         torch.cuda.synchronize()
     end = datetime.datetime.now()
-    timer.filter_time = (end - start).microseconds
+    timer.filter_time = end - start
     start = end
 
     y_pred = torch.topk(scores, k, dim=1)
     if is_cuda:
         torch.cuda.synchronize()
     end = datetime.datetime.now()
-    timer.topk = (end - start).microseconds
+    timer.topk = end - start
     start = end
 
     return y_pred, timer
@@ -179,7 +179,5 @@ if __name__ == "__main__":
     import os
 
     print(os.getpid())
-    input()
     main()
     # tracemalloc.stop()
-    input()
