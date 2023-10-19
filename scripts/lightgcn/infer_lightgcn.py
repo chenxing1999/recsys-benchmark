@@ -11,6 +11,7 @@ import yaml
 
 from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.models import get_graph_model
+from src.models.embeddings.pruned_embedding import PrunedEmbedding
 
 
 # Timer = namedtuple("Timer", ["forward", "filter", "topk"])
@@ -42,6 +43,11 @@ class Timer:
         self.filter_time /= n_runs
         self.topk /= n_runs
         return self
+
+
+def _to_prune(model):
+    model.item_emb_table = PrunedEmbedding.from_other_emb(model.item_emb_table)
+    model.user_emb_table = PrunedEmbedding.from_other_emb(model.user_emb_table)
 
 
 @torch.no_grad()
@@ -102,14 +108,19 @@ def infer(model, norm_adj, user_id, graph, k):
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
+    parser.add_argument(
+        "--prune-mode",
+        help="Convert weight tensor from dense to sparse",
+        action="store_true",
+    )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
-    return config
+    return config, args
 
 
 def main(argv=None):
-    config = get_config(argv)
+    config, args = get_config(argv)
     train_dataloader_config = config["train_dataloader"]
     train_dataset_config = train_dataloader_config["dataset"]
     train_dataset = CFGraphDataset(**train_dataset_config)
@@ -126,6 +137,8 @@ def main(argv=None):
         model_config,
     )
     del train_dataset
+    if args.prune_mode:
+        model = _to_prune(model)
 
     # snapshot = tracemalloc.take_snapshot()
     # top_stats = snapshot.statistics('lineno')

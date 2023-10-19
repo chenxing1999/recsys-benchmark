@@ -36,6 +36,11 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
         action="store_true",
         help="Force using test dataset",
     )
+    parser.add_argument(
+        "-o",
+        "--output_path",
+        help="Path to saving pruned checkpoint",
+    )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
@@ -45,11 +50,11 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
 
     if args.use_test_dataset:
         config["run_test"] = True
-    return config, args.prune_ratio
+    return config, args.prune_ratio, args.output_path
 
 
 def main(argv: Optional[Sequence[str]] = None):
-    config, prune_ratio = get_config(argv)
+    config, prune_ratio, output_path = get_config(argv)
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -96,6 +101,11 @@ def main(argv: Optional[Sequence[str]] = None):
 
     num_params = sum(torch.nonzero(p).size(0) for p in model.parameters())
     logger.info(f"Num Params: {num_params}")
+
+    if output_path is not None and prune_ratio > 0:
+        checkpoint = torch.load(checkpoint_path)
+        checkpoint["state_dict"] = state
+        torch.save(checkpoint, output_path)
 
 
 if __name__ == "__main__":
