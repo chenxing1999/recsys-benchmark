@@ -33,7 +33,7 @@ class Timer:
         self.forward += other.forward
         self.matching += other.matching
         self.filter_time += other.filter_time
-        self.topk += self.topk
+        self.topk += other.topk
         return self
 
     def avg(self, n_runs):
