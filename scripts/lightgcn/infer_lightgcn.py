@@ -29,6 +29,20 @@ class Timer:
             f"- topk={self.topk}ms"
         )
 
+    def merge(self, other):
+        self.forward += other.forward
+        self.matching += other.matching
+        self.filter_time += other.filter_time
+        self.topk += self.topk
+        return self
+
+    def avg(self, n_runs):
+        self.forward /= n_runs
+        self.matching /= n_runs
+        self.filter_time /= n_runs
+        self.topk /= n_runs
+        return self
+
 
 @torch.no_grad()
 def infer(model, norm_adj, user_id, graph, k):
@@ -142,7 +156,12 @@ def main(argv=None):
     topk = 20
     # user_id = list(range(1024))
     user_id = list(range(1))
-    results, timer = infer(model, norm_adj, user_id, graph, topk)
+    n_runs = 20
+
+    total_timer = Timer()
+    for _ in range(n_runs):
+        results, timer = infer(model, norm_adj, user_id, graph, topk)
+        total_timer.merge(timer)
     # print(tracemalloc.get_traced_memory())
     # print(results)
 
@@ -153,7 +172,7 @@ def main(argv=None):
     # for stat in top_stats[:10]:
     #     print(stat)
 
-    print(timer)
+    print(total_timer.avg(n_runs))
 
 
 if __name__ == "__main__":
