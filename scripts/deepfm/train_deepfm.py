@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 
 from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
+from src.dataset.criteo.criteo_torchfm import CriteoDataset as CriteoFMData
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import train_epoch, validate_epoch
@@ -57,6 +58,8 @@ def get_dataset_cls(loader_config) -> str:
     num_workers = loader_config.get("num_workers", 0)
     shuffle = loader_config.get("shuffle", False)
 
+    if "train_test_info" in loader_config["dataset"]:
+        return "torchfm"
     if num_workers == 0 and not shuffle:
         return "iter"
     else:
@@ -66,6 +69,7 @@ def get_dataset_cls(loader_config) -> str:
 NAME_TO_DATASET_CLS = {
     "iter": CriteoIterDataset,
     "normal": CriteoDataset,
+    "torchfm": CriteoFMData,
 }
 
 
