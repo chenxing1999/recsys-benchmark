@@ -1,7 +1,9 @@
 import math
 from collections import defaultdict
-from functools import lru_cache
-from typing import Any, DefaultDict, Dict, Final, Optional, Set
+from functools import lru_cache, partial
+from typing import Any, DefaultDict, Dict, Final, List, Optional, Set, Tuple, Union
+
+import torch
 
 NUM_INT_FEATS: Final[int] = 13
 NUM_FEATS: Final[int] = 39
@@ -40,7 +42,7 @@ def get_cache_data(
         line_idx_to_byte_loc: List[int]:
     """
 
-    feat_cnts: DefaultDict[int, DefaultDict[int, int]] = defaultdict(
+    feat_cnts: DefaultDict[int, DefaultDict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
     counts = 0
@@ -67,7 +69,7 @@ def get_cache_data(
 
     convert_numeric_feature.cache_clear()
     # feat_idx_to_set map from FeatureIndex to Set of feature values
-    feat_idx_to_set: Dict[int, Set[int]] = {
+    feat_idx_to_set: Dict[int, Set[str]] = {
         i: {feat for feat, c in cnt.items() if c >= min_threshold}
         for i, cnt in feat_cnts.items()
     }
@@ -103,8 +105,35 @@ def convert_numeric_feature(val: str) -> str:
 def merge_feat_mapper_default(
     feat_mappers, defaults
 ) -> Dict[int, DefaultDict[str, int]]:
-    feat_mappers: Dict[int, DefaultDict[str, int]] = {}
+    results: Dict[int, DefaultDict[str, int]] = {}
     for i, values in feat_mappers.items():
-        feat_mappers[i] = defaultdict(lambda: defaults[i])
-        feat_mappers[i].update(values)
-    return feat_mappers
+        results[i] = defaultdict(partial(lambda x: x, defaults[i]))
+        results[i].update(values)
+    return results
+
+
+def preprocess(
+    train_info,
+    inp: Union[str, List[str]],
+    offsets: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, int]:
+    feat_mapper = train_info["feat_mappers"]
+    defaults = train_info["defaults"]
+    feat_mapper = merge_feat_mapper_default(feat_mapper, defaults)
+
+    if isinstance(inp, str):
+        inp = inp.rstrip("\n").split("\t")
+
+    label = int(inp[0])
+    feats = [0] * NUM_FEATS
+    for i in range(1, NUM_INT_FEATS + 1):
+        value = convert_numeric_feature(inp[i])
+        feats[i - 1] = feat_mapper[i][value]
+
+    for i in range(NUM_INT_FEATS + 1, NUM_FEATS + 1):
+        feats[i - 1] = feat_mapper[i][inp[i]]
+
+    feats_tensor = torch.tensor(feats)
+    if offsets is not None:
+        feats_tensor = feats_tensor + offsets
+    return feats_tensor, label

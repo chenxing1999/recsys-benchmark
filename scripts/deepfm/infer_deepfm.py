@@ -42,10 +42,10 @@ def main(argv: Optional[Sequence[str]] = None):
     with open("tests/assets/train_criteo_sample.txt") as fin:
         for idx, line in enumerate(fin):
             inp = fin.readline()
-            labels.append(int(inp[0]))
 
             train_info = torch.load(args.train_info)
-            inp_tensor = preprocess(train_info, inp).unsqueeze(0)
+            inp_tensor, label = preprocess(train_info, inp).unsqueeze(0)
+            labels.append(label)
             inps.append(inp_tensor)
             if idx == args.batch_size:
                 break
