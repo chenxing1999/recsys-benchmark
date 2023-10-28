@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+from functools import partial
 from typing import DefaultDict, Dict, Optional
 
 import torch
@@ -73,7 +74,9 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
         # Construct actual feat mapper dictionary
         self.feat_mappers: Dict[int, DefaultDict[str, int]] = {}
         for i, values in feat_mappers.items():
-            self.feat_mappers[i] = defaultdict(lambda: defaults[i])
+            # if use lambda: defaults[i], the value defaults[i] will only
+            # be calculated after i have been changed.
+            self.feat_mappers[i] = defaultdict(partial(lambda x: x, defaults[i]))
             self.feat_mappers[i].update(values)
 
         self.field_dims = [len(self.feat_mappers[i + 1]) + 1 for i in range(NUM_FEATS)]
@@ -108,7 +111,6 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
                     feats[i - 1] = feat_mapper[i][line[i]]
 
                 feats = torch.tensor(feats)
-                # feats = feats + self.offsets
                 yield feats, label
 
     def pop_info(self):

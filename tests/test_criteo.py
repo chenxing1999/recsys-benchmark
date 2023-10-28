@@ -1,8 +1,6 @@
 import os
 import tempfile
 
-import pytest
-
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.dataset.criteo.utils import NUM_FEATS
 
@@ -25,14 +23,10 @@ def test_criteo_dataset_simple():
 
         feature = feature.tolist()
 
-        start, end = 0, 0
         for field_dim, feat in zip(dataset.field_dims, feature):
-            end += field_dim
-            assert start <= feat < end
-            start = end
+            assert feat < field_dim
 
 
-@pytest.mark.xfail
 def test_criteo_iter_dataset_init():
     with tempfile.TemporaryDirectory() as tmp_dir:
         cache_path = os.path.join(tmp_dir, "cache.bin")
@@ -47,8 +41,5 @@ def test_criteo_iter_dataset_init():
 
         feature = feature.tolist()
 
-        start, end = 0, 0
         for field_dim, feat in zip(dataset.field_dims, feature):
-            end += field_dim
-            assert start <= feat < end
-            start = end
+            assert feat < field_dim
