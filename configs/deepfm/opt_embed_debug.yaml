@@ -1,40 +1,46 @@
 model:
-  num_factor: 64
+  num_factor: 16
   hidden_sizes:
-    - 1024
-    - 512
-    - 256
-  p_dropout: 0.0
+    - 400
+    - 400
+    - 400
+  p_dropout: 0.2
   use_batchnorm: True
   embedding_config:
     name: deepfm_optembed
 
 train_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-common-split/train.bin
+    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    my_path: dataset/ctr/criteo/criteo-common-split/train.bin
+    dataset_name: train
+    dataset_path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-fm
   num_workers: 8
   batch_size: 2048
-  shuffle: True
 
 val_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-common-split/val.bin
+    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    dataset_name: val
+    dataset_path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-fm
   batch_size: 2048
   num_workers: 8
 
 test_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-common-split/test.bin
+    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    dataset_name: test
+    dataset_path: dataset/ctr/criteo/train.txt
+    cache_path: dataset/ctr/criteo/criteo-fm
   batch_size: 2048
   num_workers: 8
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint.pth
-num_epochs: 1000
+checkpoint_path: checkpoints/deepfm_checkpoint_opt.pth
+num_epochs: 15
 log_step: 1000
 
 weight_decay: 0.001
@@ -45,7 +51,7 @@ enable_profile: false
 
 # Opt Specific config
 opt_embed:
-  init_weight_path: checkpoints/opt/initial.pth
+  init_weight_path: checkpoints/deepfm/opt/initial.pth
   t_param_lr: 0.0001
   alpha: 0.0001
 

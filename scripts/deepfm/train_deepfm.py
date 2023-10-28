@@ -1,13 +1,13 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence
 
 import torch
 import yaml
 from torch.utils.data import DataLoader
 
 from src import metrics
-from src.dataset.criteo import CriteoDataset, CriteoIterDataset
+from src.dataset.criteo import get_dataset_cls
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import train_epoch, validate_epoch
@@ -53,22 +53,6 @@ def init_profiler(config: Dict):
     return prof
 
 
-def get_dataset_cls(loader_config) -> str:
-    num_workers = loader_config.get("num_workers", 0)
-    shuffle = loader_config.get("shuffle", False)
-
-    if num_workers == 0 and not shuffle:
-        return "iter"
-    else:
-        return "normal"
-
-
-NAME_TO_DATASET_CLS = {
-    "iter": CriteoIterDataset,
-    "normal": CriteoDataset,
-}
-
-
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
@@ -81,8 +65,6 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info(f"Train dataset type: {train_dataset_cls}")
 
     train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset: Union[CriteoIterDataset, CriteoDataset]
-    train_dataset_cls = NAME_TO_DATASET_CLS[train_dataset_cls]
     train_dataset = train_dataset_cls(**train_dataset_config)
 
     logger.info("Successfully load train dataset")
@@ -106,7 +88,6 @@ def main(argv: Optional[Sequence[str]] = None):
     # TODO: Refactor later
     val_dataset_cls = get_dataset_cls(val_dataloader_config)
     logger.info(f"Val dataset type: {val_dataset_cls}")
-    val_dataset_cls = NAME_TO_DATASET_CLS[val_dataset_cls]
     train_info_to_val = train_dataset.pop_info()
 
     val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
@@ -141,6 +122,15 @@ def main(argv: Optional[Sequence[str]] = None):
             logger.info(f"{key} - {value:.4f}")
 
         return
+
+    if "deepfm_optembed_retrain" in config["model"]["embedding_config"]["name"]:
+        logger.info("DeepFM OptEmbed Retrain detected")
+        init_weight_path = config["opt_embed"]["init_weight_path"]
+        info = torch.load(init_weight_path)
+        mask = info["mask"]
+        keys = model.load_state_dict(info["full"], False)
+        assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
+        model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
 
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -205,7 +195,7 @@ def main(argv: Optional[Sequence[str]] = None):
                         "state_dict": model.state_dict(),
                         "model_config": model_config,
                         "val_metrics": val_metrics,
-                        "filed_dims": train_dataset.field_dims,
+                        "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
     except KeyboardInterrupt:

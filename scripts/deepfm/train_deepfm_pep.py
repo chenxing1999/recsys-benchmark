@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence
 
 import loguru
 import torch
@@ -8,7 +8,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from src import metrics
-from src.dataset.criteo import CriteoDataset, CriteoIterDataset
+from src.dataset.criteo import get_dataset_cls
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import validate_epoch
@@ -57,20 +57,21 @@ def train_epoch(
 
             with torch.no_grad():
                 sparsity, n_params = model.embedding.get_sparsity(True)
-            msg += f" - params: {n_params}"
+            msg += f" - params: {n_params} - sparsity: {sparsity:.2}"
             for metric, value in loss_dict.items():
                 if value > 0:
                     avg = value / (idx + 1)
                     msg += f" - {metric}: {avg:.4}"
-            if n_params <= TARGET_SPARSITY:
-                path = os.path.join(
-                    model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
-                )
-                loguru.logger.info(f"Saved {TARGET_SPARSITY}")
-                if not os.path.exists(path):
-                    torch.save(model.embedding.state_dict(), path)
+            # if n_params <= TARGET_SPARSITY:
+            #     path = os.path.join(
+            #         model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
+            #     )
+            #     loguru.logger.info(f"Saved {TARGET_SPARSITY}")
+            #     if not os.path.exists(path):
+            #         torch.save(model.embedding.state_dict(), path)
 
             loguru.logger.info(msg)
+            model.embedding.train_callback()
 
         if profiler:
             profiler.step()
@@ -119,22 +120,6 @@ def init_profiler(config: Dict):
     return prof
 
 
-def get_dataset_cls(loader_config) -> str:
-    num_workers = loader_config.get("num_workers", 0)
-    shuffle = loader_config.get("shuffle", False)
-
-    if num_workers == 0 and not shuffle:
-        return "iter"
-    else:
-        return "normal"
-
-
-NAME_TO_DATASET_CLS = {
-    "iter": CriteoIterDataset,
-    "normal": CriteoDataset,
-}
-
-
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
@@ -147,8 +132,6 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info(f"Train dataset type: {train_dataset_cls}")
 
     train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset: Union[CriteoIterDataset, CriteoDataset]
-    train_dataset_cls = NAME_TO_DATASET_CLS[train_dataset_cls]
     train_dataset = train_dataset_cls(**train_dataset_config)
 
     logger.info("Successfully load train dataset")
@@ -172,7 +155,6 @@ def main(argv: Optional[Sequence[str]] = None):
     # TODO: Refactor later
     val_dataset_cls = get_dataset_cls(val_dataloader_config)
     logger.info(f"Val dataset type: {val_dataset_cls}")
-    val_dataset_cls = NAME_TO_DATASET_CLS[val_dataset_cls]
     train_info_to_val = train_dataset.pop_info()
 
     val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)

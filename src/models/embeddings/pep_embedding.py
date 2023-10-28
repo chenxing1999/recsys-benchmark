@@ -49,6 +49,8 @@ class PepEmbeeding(IEmbedding):
 
         if sparsity is None:
             sparsity = [0.8, 0.9, 0.99]
+
+        assert isinstance(sparsity, list) and isinstance(sparsity[0], float)
         self.sparsity = list(sorted(sparsity))
         self._cur_min_spar_idx = 0
 

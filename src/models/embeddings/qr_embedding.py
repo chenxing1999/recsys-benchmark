@@ -76,7 +76,8 @@ class QRHashingEmbedding(IEmbedding):
         # so that ops(emb1, emb2) will have uniform(-a, a).
         # Note: Orignal QR init method use uniform(sqrt(1 / num_categories), 1)
         # https://github.com/facebookresearch/dlrm/blob/dee060be6c2f4a89644acbff6b3a36f7c0d5ce39/tricks/qr_embedding_bag.py#L182-L183
-        # But I use uniform(-alpha, alpha) with alpha = sqrt(1 / num_categories)
+        # I use similiar distribution, I think that the reason for this
+        # distribution is when multiply, there would be no zero multiply with zero
 
         alpha = math.sqrt(1 / self._num_item)
         nn.init.uniform_(self.emb1.weight, alpha, 1)

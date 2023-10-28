@@ -16,6 +16,7 @@ DEFAULT_BASE_CONFIG_PATH = "../configs/deepfm/base_config.yaml"
 DEFAULT_BASE_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__), DEFAULT_BASE_CONFIG_PATH
 )
+DEFAULT_BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
 
 
 def parse_args():
@@ -32,6 +33,12 @@ def parse_args():
         "-n",
         default=None,
         help="Run name, default: basename of log_folder",
+    )
+    parser.add_argument(
+        "--best_checkpoint_path",
+        "-p",
+        default=DEFAULT_BEST_CHECKPOINT_PATH,
+        help="Path to best checkpoint path",
     )
     args = parser.parse_args()
 
@@ -65,7 +72,7 @@ with open(BASE_CONFIG) as fin:
     base_config = yaml.safe_load(fin)
 
 CHECKPOINT_PATH = base_config["checkpoint_path"]
-BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
+BEST_CHECKPOINT_PATH = args.best_checkpoint_path
 
 
 def generate_config(trial):
