@@ -9,12 +9,13 @@ from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.dataset.criteo.criteo_torchfm import CriteoDataset as CriteoFMData
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
+
+# save logger in evolution logger to logs/evol-logger
 from src.models.embeddings.deepfm_opt_embed import evol_search_deepfm
 from src.models.embeddings.deepfm_opt_embed import logger as evol_logger
+from src.utils import set_seed
 
 evol_logger.add("logs/evol-logger")
-
-from src.utils import set_seed
 
 set_seed(2023)
 
