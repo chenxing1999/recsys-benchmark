@@ -1,7 +1,7 @@
 """Original implementation for DeepFM OptEmbedding"""
 import random
 from collections import namedtuple
-from functools import lru_cache, partial
+from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -569,7 +569,7 @@ class RetrainOptEmbed(IOptEmbed):
         self,
         field_dims: Union[List[int], int],
         hidden_size,
-        mode: Optional[str]=None,
+        mode: Optional[str] = None,
         t_init: Optional[float] = 0,
         mode_threshold_e="field",
         mode_threshold_d="field",
