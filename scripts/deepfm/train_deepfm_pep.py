@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from src import metrics
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
+from src.dataset.criteo.criteo_torchfm import CriteoDataset as CriteoFMData
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import validate_epoch
@@ -57,20 +58,21 @@ def train_epoch(
 
             with torch.no_grad():
                 sparsity, n_params = model.embedding.get_sparsity(True)
-            msg += f" - params: {n_params}"
+            msg += f" - params: {n_params} - sparsity: {sparsity:.2}"
             for metric, value in loss_dict.items():
                 if value > 0:
                     avg = value / (idx + 1)
                     msg += f" - {metric}: {avg:.4}"
-            if n_params <= TARGET_SPARSITY:
-                path = os.path.join(
-                    model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
-                )
-                loguru.logger.info(f"Saved {TARGET_SPARSITY}")
-                if not os.path.exists(path):
-                    torch.save(model.embedding.state_dict(), path)
+            # if n_params <= TARGET_SPARSITY:
+            #     path = os.path.join(
+            #         model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
+            #     )
+            #     loguru.logger.info(f"Saved {TARGET_SPARSITY}")
+            #     if not os.path.exists(path):
+            #         torch.save(model.embedding.state_dict(), path)
 
             loguru.logger.info(msg)
+            model.embedding.train_callback()
 
         if profiler:
             profiler.step()
@@ -123,6 +125,8 @@ def get_dataset_cls(loader_config) -> str:
     num_workers = loader_config.get("num_workers", 0)
     shuffle = loader_config.get("shuffle", False)
 
+    if "train_test_info" in loader_config["dataset"]:
+        return "torchfm"
     if num_workers == 0 and not shuffle:
         return "iter"
     else:
@@ -132,6 +136,7 @@ def get_dataset_cls(loader_config) -> str:
 NAME_TO_DATASET_CLS = {
     "iter": CriteoIterDataset,
     "normal": CriteoDataset,
+    "torchfm": CriteoFMData,
 }
 
 

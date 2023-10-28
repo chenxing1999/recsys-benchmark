@@ -350,15 +350,17 @@ def _validate_candidate(
     from src.trainer.deepfm import validate_epoch
 
     # hook
-    model.embedding.forward = partial(
-        model.embedding.forward,
-        mask_d=candidate.save_mask,
-    )
+    # model.embedding.forward = partial(
+    #     model.embedding.forward,
+    #     mask_d=candidate.save_mask,
+    # )
+    model.eval()
+    model.embedding.get_weight(candidate.save_mask)
     # validate
     result = validate_epoch(val_loader, model)
 
     # unhook
-    model.embedding.forward = model.embedding.forward.func
+    # model.embedding.forward = model.embedding.forward.func
     return result["auc"]
 
 
@@ -567,7 +569,7 @@ class RetrainOptEmbed(IOptEmbed):
         self,
         field_dims: Union[List[int], int],
         hidden_size,
-        mode: Optional[str],
+        mode: Optional[str]=None,
         t_init: Optional[float] = 0,
         mode_threshold_e="field",
         mode_threshold_d="field",
@@ -615,6 +617,8 @@ class RetrainOptEmbed(IOptEmbed):
 
         self._cur_weight = None
         self._handle = self.register_full_backward_hook(_delete_cache)
+
+        logger.info(f"Params: {torch.nonzero(self._mask).size(0)}")
 
         return self._mask
 

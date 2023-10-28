@@ -146,6 +146,15 @@ def main(argv: Optional[Sequence[str]] = None):
 
         return
 
+    if "deepfm_optembed_retrain" in config["model"]["embedding_config"]["name"]:
+        logger.info("DeepFM OptEmbed Retrain detected")
+        init_weight_path = config["opt_embed"]["init_weight_path"]
+        info = torch.load(init_weight_path)
+        mask = info["mask"]
+        keys = model.load_state_dict(info["full"], False)
+        assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
+        model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
+
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=config["learning_rate"],

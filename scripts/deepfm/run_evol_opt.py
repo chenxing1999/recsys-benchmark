@@ -6,9 +6,14 @@ import yaml
 from torch.utils.data import DataLoader
 
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
+from src.dataset.criteo.criteo_torchfm import CriteoDataset as CriteoFMData
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 from src.models.embeddings.deepfm_opt_embed import evol_search_deepfm
+from src.models.embeddings.deepfm_opt_embed import logger as evol_logger
+
+evol_logger.add("logs/evol-logger")
+
 from src.utils import set_seed
 
 set_seed(2023)
@@ -27,6 +32,8 @@ def get_dataset_cls(loader_config) -> str:
     num_workers = loader_config.get("num_workers", 0)
     shuffle = loader_config.get("shuffle", False)
 
+    if "train_test_info" in loader_config["dataset"]:
+        return "torchfm"
     if num_workers == 0 and not shuffle:
         return "iter"
     else:
@@ -36,6 +43,7 @@ def get_dataset_cls(loader_config) -> str:
 NAME_TO_DATASET_CLS = {
     "iter": CriteoIterDataset,
     "normal": CriteoDataset,
+    "torchfm": CriteoFMData,
 }
 
 
@@ -114,7 +122,7 @@ def main(argv: Optional[Sequence[str]] = None):
         "mask_d": mask,
         "mask_e": model.embedding.get_mask_e(),
     }
-    torch.save(info, init_weight_path)
+    torch.save(info, "tmp.pth")
 
 
 if __name__ == "__main__":
