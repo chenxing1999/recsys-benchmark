@@ -123,7 +123,7 @@ def main(argv: Optional[Sequence[str]] = None):
         "mask_d": mask,
         "mask_e": model.embedding.get_mask_e(),
     }
-    torch.save(info, "tmp.pth")
+    torch.save(info, init_weight_path)
 
 
 if __name__ == "__main__":
