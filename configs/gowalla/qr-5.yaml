@@ -9,7 +9,7 @@ model:
 
 train_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/model_train.txt
+    path: dataset/cf/gowalla/model_train.txt
     adj_style: lightgcn # lightgcn or hccf
     sampling_method: popularity
   num_workers: 4
@@ -17,13 +17,13 @@ train_dataloader:
 
 val_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/model_val.txt
+    path: dataset/cf/gowalla/model_val.txt
   batch_size: 2048
   num_workers: 4
 
 test_dataloader:
   dataset:
-    path: dataset/cf/yelp2018/test.txt
+    path: dataset/cf/gowalla/test.txt
   batch_size: 2048
   num_workers: 4
 
