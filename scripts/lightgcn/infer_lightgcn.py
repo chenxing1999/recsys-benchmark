@@ -1,7 +1,7 @@
 """Code used to benchmark maximum RAM usage for LightGCN inference"""
 import argparse
 import datetime
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
 
 import torch
 import yaml  # type: ignore
@@ -52,7 +52,7 @@ def infer(
     user_id: List[i64],
     graph: Dict[i64, List[i64]],
     k: i64,
-) -> Tuple[torch.return_types.topk, Timer]:
+) -> Tuple[NamedTuple, Timer]:
     is_cuda: bool = norm_adj.device.type == "cuda"
     if is_cuda:
         torch.cuda.synchronize()
