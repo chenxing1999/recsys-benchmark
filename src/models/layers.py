@@ -12,20 +12,20 @@ class SparseDropout(nn.Module):
         super().__init__()
         self._dropout = nn.Dropout(p, inplace)
 
-    def forward(self, matrix: torch.Tensor):
+    def forward(self, matrix: torch.Tensor) -> torch.Tensor:
         if matrix.is_sparse_csr:
             # Matrix CSR
             values = matrix.values()
             values = self._dropout(values)
-            crow_indices = matrix.crow_indices
-            col_indices = matrix.col_indices
+            crow_indices = matrix.crow_indices()
+            col_indices = matrix.col_indices()
             return torch.sparse_csr_tensor(
                 crow_indices,
                 col_indices,
                 values,
                 matrix.size(),
             )
-        else:
+        elif matrix.layout == torch.sparse_coo:
             # Matrix COO
             matrix = matrix.coalesce()
             values = matrix.values()
@@ -33,3 +33,5 @@ class SparseDropout(nn.Module):
 
             values = self._dropout(values)
             return torch.sparse_coo_tensor(indices, values, matrix.size())
+        else:
+            raise ValueError(f"Not supported matrix layout: {matrix.layout}")

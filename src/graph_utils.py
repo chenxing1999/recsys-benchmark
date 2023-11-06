@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 import torch
 
@@ -8,12 +8,12 @@ def get_adj(
     num_item: int,
     num_user: Optional[int] = None,
     normalize=False,
-) -> torch.tensor:
+) -> torch.Tensor:
     """Get Adjacency matrix from graph item"""
     if not num_user:
         num_user = max(graph.keys())
 
-    indices = [[], []]
+    indices: Tuple[List[int], List[int]] = ([], [])
     num_interact = 0
 
     for user, items in graph.items():
@@ -21,9 +21,9 @@ def get_adj(
         indices[1].extend(items)
         num_interact += len(items)
 
-    indices = torch.tensor(indices)
+    indices_tensor = torch.tensor(indices)
     adj = torch.sparse_coo_tensor(
-        indices,
+        indices_tensor,
         torch.ones(num_interact),
         size=(num_user, num_item),
     )
@@ -32,11 +32,11 @@ def get_adj(
 
     degree_user = adj.sum(dim=1).pow(-0.5)
     degree_item = adj.sum(dim=0).pow(-0.5)
-    values = torch.index_select(degree_user, 0, indices[0]) * torch.index_select(
-        degree_item, 0, indices[1]
+    values = torch.index_select(degree_user, 0, indices_tensor[0]) * torch.index_select(
+        degree_item, 0, indices_tensor[1]
     )
     adj = torch.sparse_coo_tensor(
-        indices,
+        indices_tensor,
         values.coalesce().values(),
         size=(num_user, num_item),
     ).coalesce()
@@ -61,7 +61,7 @@ def calculate_sparse_graph_adj_norm(
     if not num_user:
         num_user = max(graph.keys())
 
-    indices = [[], []]
+    indices: Tuple[List[int], List[int]] = ([], [])
     num_interact = 0
     for user, items in graph.items():
         # R
@@ -74,21 +74,21 @@ def calculate_sparse_graph_adj_norm(
 
         num_interact += len(items)
 
+    indices_tensor = torch.tensor(indices)
     adj = torch.sparse_coo_tensor(
-        indices,
+        indices_tensor,
         torch.ones(num_interact * 2),
         size=(num_user + num_item, num_item + num_user),
     )
 
     degree = adj.sum(dim=0).pow(-0.5)
 
-    indices = adj.coalesce().indices()
-    values = torch.index_select(degree, 0, indices[0]) * torch.index_select(
-        degree, 0, indices[1]
+    values = torch.index_select(degree, 0, indices_tensor[0]) * torch.index_select(
+        degree, 0, indices_tensor[1]
     )
 
     norm_adj = torch.sparse_coo_tensor(
-        indices,
+        indices_tensor,
         values.coalesce().values(),
         size=(num_user + num_item, num_item + num_user),
     )

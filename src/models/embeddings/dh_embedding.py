@@ -65,7 +65,7 @@ class DHEmbedding(IEmbedding):
 
         self._primes = torch.tensor(primes)
 
-        layers = []
+        layers: List[nn.Module] = []
         self._inp_size = inp_size
         self._num_item = num_item
 
@@ -118,7 +118,8 @@ class DHEmbedding(IEmbedding):
 
         mask = b == 0
         while mask.sum() > 0:
-            b[mask] = torch.randint(NEGATIVE_LARGE_INT, LARGE_INT, (mask.sum(),))
+            num_values = mask.sum().item()
+            b[mask] = torch.randint(NEGATIVE_LARGE_INT, LARGE_INT, (num_values,))
             mask = b == 0
 
         p_idx = torch.randint(0, len(primes), (k,))
@@ -149,7 +150,7 @@ class DHEmbedding(IEmbedding):
     def forward(self, inp: Union[torch.IntTensor, torch.LongTensor]):
         device = self._seq[0].weight.device
         mode = self._mode
-        if self._use_cache:
+        if self._use_cache and isinstance(self._cache, torch.Tensor):
             cache = self._cache
             cache = cache.to(device)
 

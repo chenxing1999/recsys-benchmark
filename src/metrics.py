@@ -21,22 +21,25 @@ def get_ndcg(
                 y_true_ij - if list, Item index recommended for user i with rank j
     """
 
-    ndcg = 0
+    ndcg: float = 0
     for pred_user, true_user in zip(y_pred, y_true):
-        dcg = 0
-        idcg = 0
+        dcg: np.ndarray
+        idcg: np.ndarray
+
+        dcg_sum: float
+        idcg_sum: float
 
         dcg = np.array(
             list(map(lambda pred_item: pred_item in true_user, pred_user[:k]))
         )
         weight = 1 / np.log2(np.arange(2, dcg.shape[0] + 2))
-        dcg = (weight * dcg).sum()
+        dcg_sum = (weight * dcg).sum()
 
         length = min(len(true_user), k)
         idcg = 1 / (np.log2(np.arange(2, length + 2)))
-        idcg = idcg.sum()
+        idcg_sum = idcg.sum()
 
-        ndcg += dcg / idcg
+        ndcg += dcg_sum / idcg_sum
     num_users = len(y_pred)
     return ndcg / num_users
 
@@ -78,11 +81,11 @@ def get_ndcg_recall(
                 y_true_ij - if list, Item index recommended for user i with rank j
     """
 
-    ndcg = 0
-    recall = 0
+    ndcg: float = 0
+    recall: float = 0
     for pred_user, true_user in zip(y_pred, y_true):
-        dcg = 0
-        idcg = 0
+        dcg: float
+        idcg: float
 
         # array with shape K
         is_relavent = np.array([pred_item in true_user for pred_item in pred_user[:k]])
@@ -91,8 +94,7 @@ def get_ndcg_recall(
         dcg = (weight * is_relavent).sum()
 
         length = min(len(true_user), k)
-        idcg = 1 / (np.log2(np.arange(2, length + 2)))
-        idcg = idcg.sum()
+        idcg = (1 / (np.log2(np.arange(2, length + 2)))).sum()
 
         ndcg += dcg / idcg
 

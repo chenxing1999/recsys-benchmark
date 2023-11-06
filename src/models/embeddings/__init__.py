@@ -10,7 +10,7 @@ from .dh_embedding import DHEmbedding
 from .lightgcn_opt_embed import OptEmbed, RetrainOptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
 from .qr_embedding import QRHashingEmbedding
-from .tensortrain_embeddings import TTEmbedding
+from .tensortrain_embeddings import TTEmbedding  # type: ignore
 
 NAME_TO_CLS = {
     "vanilla": VanillaEmbedding,
