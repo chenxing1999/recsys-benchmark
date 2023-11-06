@@ -2,7 +2,7 @@ import os
 from typing import Dict, List, Set, Tuple, Union
 
 import numpy as np
-import psutil  # type: ignore
+import psutil
 import torch
 
 
