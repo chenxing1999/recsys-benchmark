@@ -51,7 +51,7 @@ class CFGraphDataset(Dataset):
     def __init__(
         self,
         path: str,
-        adj_style: str,
+        adj_style: str = "lightgcn",
         sampling_method: Literal["uniform", "popularity"] = "uniform",
         num_neg_item: int = 1,
     ):

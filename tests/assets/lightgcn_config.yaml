@@ -8,7 +8,7 @@ model:
 
 train_dataloader:
   dataset:
-    path: tests/assets/sample_cf.txt # num_user: 101, num_item: 77
+    path: tests/assets/sample_cf.txt # num_user: 77, num_item: 102
     adj_style: lightgcn # lightgcn or hccf
     sampling_method: popularity
   num_workers: 2
