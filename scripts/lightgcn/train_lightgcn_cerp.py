@@ -167,33 +167,6 @@ def _main(trial, base_config):
         model_config,
     )
 
-    # opt_embed specific code
-    is_retrain = "retrain" in model_config["embedding_config"]["name"]
-    is_opt_embed = "opt_embed" in config
-    if is_opt_embed and not is_retrain:
-        init_weight_path = config["opt_embed"]["init_weight_path"]
-        torch.save(
-            {
-                "full": model.state_dict(),
-            },
-            config["opt_embed"]["init_weight_path"],
-        )
-    elif is_opt_embed:
-        init_weight_path = config["opt_embed"]["init_weight_path"]
-        info = torch.load(init_weight_path)
-        mask = info["mask"]
-        keys = model.load_state_dict(info["full"], False)
-        length_miss = len(keys[0])
-        expected_miss = sum(
-            1
-            for key in keys[0]
-            if key in ["user_emb_table._mask", "item_emb_table._mask"]
-        )
-        length_miss = length_miss - expected_miss
-        assert length_miss == 0, f"There are some keys missing: {keys[0]}"
-        model.item_emb_table.init_mask(mask_d=mask["item"]["mask_d"], mask_e=None)
-        model.user_emb_table.init_mask(mask_d=mask["user"]["mask_d"], mask_e=None)
-
     if torch.cuda.is_available():
         device = "cuda"
     else:
@@ -248,13 +221,6 @@ def _main(trial, base_config):
     target_sparsity = cerp_config["target_sparsity"]
 
     for epoch_idx in range(num_epochs):
-        if epoch_idx > 5:
-            train_dataloader = DataLoader(
-                train_dataset,
-                train_dataloader_config["batch_size"],
-                shuffle=True,
-                num_workers=train_dataloader_config["num_workers"],
-            )
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = train_epoch_cerp(
             train_dataloader,
