@@ -45,3 +45,24 @@ def info_nce(
     pos_score = (view1 @ view2.T) / temperature
     score = torch.diag(F.log_softmax(pos_score, dim=1))
     return -score.mean()
+
+
+def bpr_loss_multi(user_embs, pos_embs, neg_embs):
+    """Bayesian Personalized Ranking loss re-implementation for multiple negative items
+
+    Args:
+        user_embs: N x D -
+        pos_embs:  N x D
+        neg_embs:  N x K x D  -
+            neg_embs[i] is the negative correspondence of pos_embs[i]
+
+    Returns:
+        single loss item
+    """
+    y_hat_pos = einsum(user_embs, pos_embs, "i j, i j -> i").unsqueeze(-1)
+    y_hat_neg = einsum(user_embs, neg_embs, "i j, i k j -> i k")
+
+    # loss = -F.logsigmoid(y_hat_pos - y_hat_neg).mean()
+    loss = -F.logsigmoid(y_hat_pos - y_hat_neg).sum() / len(user_embs)
+
+    return loss

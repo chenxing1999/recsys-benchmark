@@ -20,7 +20,17 @@ def train_epoch(
     weight_decay=0,
     profiler=None,
     info_nce_weight=0,
-):
+) -> Dict[str, float]:
+    """
+    Args:
+
+
+    Returns: Dict contains following keys:
+        loss
+        reg_loss
+        rec_loss
+        cl_loss
+    """
     adj = dataloader.dataset.get_norm_adj()
 
     model.train()
