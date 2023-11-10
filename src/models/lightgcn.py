@@ -33,6 +33,7 @@ class LightGCN(IGraphBaseCore):
 
         self._num_user = num_user
         self._num_item = num_item
+        self._hidden_size = hidden_size
 
         if p_dropout > 0:
             self.sparse_dropout = SparseDropout(p_dropout)
@@ -164,15 +165,12 @@ class SingleLightGCN(IGraphBaseCore):
         return torch.split(res, (self._num_user, self._num_item))
 
     def get_reg_loss(self, users, pos_items, neg_items) -> torch.Tensor:
-        user_emb = self.emb_table(users)
-        pos_item_emb = self.emb_table(pos_items + self._num_user)
-        neg_item_emb = self.emb_table(neg_items + self._num_user)
+        indices = torch.cat(
+            [users, pos_items + self._num_user, neg_items + self._num_user]
+        )
+        emb = self.emb_table(indices)
+        reg_loss = emb.norm(2).pow(2) / (2 * len(users))
 
-        reg_loss = (
-            user_emb.norm(2).pow(2)
-            + pos_item_emb.norm(2).pow(2)
-            + neg_item_emb.norm(2).pow(2)
-        ) / (2 * len(users))
         return reg_loss
 
 

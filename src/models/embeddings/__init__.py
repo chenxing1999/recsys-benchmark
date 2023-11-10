@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 
 from .base import IEmbedding, VanillaEmbedding
+from .cerp_embedding import CerpEmbedding
 from .deepfm_opt_embed import OptEmbed as DeepFMOptEmbed
 from .deepfm_opt_embed import RetrainOptEmbed as DeepFMRetrainOptEmbed
 from .dh_embedding import DHEmbedding
@@ -25,6 +26,7 @@ NAME_TO_CLS = {
     "deepfm_optembed": DeepFMOptEmbed,
     "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
     "tt_emb": TTEmbedding,
+    "cerp": CerpEmbedding,
 }
 
 

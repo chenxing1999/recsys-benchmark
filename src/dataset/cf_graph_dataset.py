@@ -1,5 +1,5 @@
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal, Tuple, Union
 
 import torch
 from loguru import logger
@@ -48,13 +48,31 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, list]:
 class CFGraphDataset(Dataset):
     """LightGCN Graph CF Structure"""
 
-    def __init__(self, path: str, adj_style: str, sampling_method="uniform"):
+    def __init__(
+        self,
+        path: str,
+        adj_style: str,
+        sampling_method: Literal["uniform", "popularity"] = "uniform",
+        num_neg_item: int = 1,
+    ):
         """
         Args:
             path: Path to dataset txt file
                 the file contains multiple line with each line contains
                     <user_id> <item_id1> <item_id2> ...
             adj_style: lightgcn or hccf
+            sampling_method
+                - uniform: for each user, sampling one pair of positive
+                    and negative items
+                - popularity: for each pair of user and negative item,
+                    sampling one negative item
+            num_neg_item: Num negative item sampling per data point
+                if num_neg_item > 1:
+                    __getitem__ will return Tuple[int, int, List[int]]
+                    with default collate function of dataloader, this will return
+                        Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]
+                else:
+                    __getitem__ will return Tuple[int, int, int]
         """
         assert adj_style in [
             "lightgcn",
@@ -62,6 +80,9 @@ class CFGraphDataset(Dataset):
         ], f"{adj_style=}, only accepts ['lightgcn', 'hccf']"
 
         assert sampling_method in ["uniform", "popularity"]
+        assert (
+            num_neg_item >= 1
+        ), "Num negative item must be greater than or equals to 1"
 
         self._path = path
         graph, users, num_item, user_item_pairs = load_graph_dataset(path)
@@ -91,6 +112,7 @@ class CFGraphDataset(Dataset):
             raise ValueError(f"{adj_style=} is not supported")
         self.per_user_num = num_interactions // self.num_users
         self.dataset_length = self.num_users * self.per_user_num
+        self.num_neg_item = num_neg_item
 
     def __len__(self):
         sampling_method = self.sampling_method
@@ -99,32 +121,47 @@ class CFGraphDataset(Dataset):
         elif sampling_method == "popularity":
             return len(self._user_item_pairs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> Tuple[int, int, Union[int, List[int]]]:
+        """
+        Returns:
+            if num_neg_item > 1:
+                __getitem__ will return Tuple[int, int, List[int]]
+                with default collate function of dataloader, this will return
+                    Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]
+            else:
+                __getitem__ will return Tuple[int, int, int]
+        """
         sampling_method = self.sampling_method
-        if self.sampling_method == "uniform":
-            return self._get_uniform(idx)
+        if sampling_method == "uniform":
+            user_idx, pos_item_idx = self._get_uniform(idx)
         elif sampling_method == "popularity":
-            return self._get_popularity(idx)
+            user_idx, pos_item_idx = self._user_item_pairs[idx]
 
-    def _get_popularity(self, idx) -> Tuple[int, int, int]:
-        user_idx, pos_item_idx = self._user_item_pairs[idx]
-        neg_item_idx = pos_item_idx
+        if self.num_neg_item == 1:
+            neg_item_idx: int = self._sample_negative(user_idx)[0]
+            return user_idx, pos_item_idx, neg_item_idx
+        else:
+            neg_items: List[int] = self._sample_negative(user_idx, self.num_neg_item)
+            return user_idx, pos_item_idx, neg_items
 
-        while neg_item_idx in self._graph[user_idx]:
-            neg_item_idx = random.randint(0, self.num_items - 1)
-        return user_idx, pos_item_idx, neg_item_idx
+    def _sample_negative(self, user_idx, num_neg=1) -> List[int]:
+        items = set()
 
-    def _get_uniform(self, idx) -> Tuple[int, int, int]:
+        for i in range(num_neg):
+            neg_item_idx = self._graph[user_idx][0]
+            while neg_item_idx in self._graph[user_idx] or neg_item_idx in items:
+                neg_item_idx = random.randint(0, self.num_items - 1)
+
+            items.add(neg_item_idx)
+        return list(items)
+
+    def _get_uniform(self, idx) -> Tuple[int, int]:
         user_idx = idx // self.per_user_num
         if not self._graph[user_idx]:
             raise ValueError("Exists user with no item interaction")
 
         pos_item_idx: int = random.choice(self._graph[user_idx])
-
-        neg_item_idx = pos_item_idx
-        while neg_item_idx in self._graph[user_idx]:
-            neg_item_idx = random.randint(0, self.num_items - 1)
-        return user_idx, pos_item_idx, neg_item_idx
+        return user_idx, pos_item_idx
 
     def describe(self):
         # Minor analyze for dataset
