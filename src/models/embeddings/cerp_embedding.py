@@ -138,10 +138,25 @@ class CerpEmbedding(IEmbedding):
         p_idx = x % self._bucket_size
 
         # get user, items' corresponding embedding vectors in Q, R matrices
-        batch_Q_v = F.embedding(q_idx, self.sparse_q_weight)
-        batch_P_v = F.embedding(p_idx, self.sparse_p_weight)
+        if self._mode is None:
+            batch_Q_v = F.embedding(q_idx, self.sparse_q_weight)
+            batch_P_v = F.embedding(p_idx, self.sparse_p_weight)
 
-        return batch_Q_v + batch_P_v
+            emb = batch_Q_v + batch_P_v
+            return emb
+        elif self._mode in ["sum", "mean"]:
+            batch_Q_v = F.embedding_bag(q_idx, self.sparse_q_weight, mode=self._mode)
+            batch_P_v = F.embedding_bag(p_idx, self.sparse_p_weight, mode=self._mode)
+
+            emb = batch_Q_v + batch_P_v
+            return emb
+        else:
+            # mode == "max"
+            batch_Q_v = F.embedding(q_idx, self.sparse_q_weight)
+            batch_P_v = F.embedding(p_idx, self.sparse_p_weight)
+
+            emb = batch_Q_v + batch_P_v
+            return emb.max(dim=1)[0]
 
     def get_sparsity(self, get_n_params=False):
         total_params = self._num_item * self._hidden_size
