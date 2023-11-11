@@ -18,6 +18,7 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
 from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
+from src.models.lightgcn import save_lightgcn_emb_checkpoint
 from src.trainer.lightgcn import train_epoch, validate_epoch
 from src.utils import set_seed
 
@@ -152,7 +153,17 @@ def init_profiler(config: Dict):
     return prof
 
 
-def _main(trial: optuna.Trial, base_config: Dict):
+def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
+    """Training LightGCN with PEP wrapper
+
+    Main different with original trainning:
+        - Save the initial checkpoint or Load it if it exists for training.
+        - Customized optimizer for threshold optimization
+        - Save checkpoint in an awkward way when found target sparsity
+
+    Returns: NDCG, Sparsity
+
+    """
     # Not support other config besides pep config
     if base_config["force"]:
         # n-trials = 0
@@ -262,8 +273,6 @@ def _main(trial: optuna.Trial, base_config: Dict):
     model_init_path = pep_config["model_init_path"]
     target_sparsity = pep_config["target_sparsity"]
     trial_checkpoint = pep_config["trial_checkpoint"]
-    os.makedirs(os.path.join(trial_checkpoint, "user"), exist_ok=True)
-    os.makedirs(os.path.join(trial_checkpoint, "item"), exist_ok=True)
     if os.path.exists(model_init_path):
         state = torch.load(model_init_path)
         model.load_state_dict(state, strict=False)
@@ -339,10 +348,7 @@ def _main(trial: optuna.Trial, base_config: Dict):
                 if not achieved_target and sparsity > target_sparsity:
                     logger.info("found sparsity target")
                     achieved_target = True
-                    user_path = os.path.join(trial_checkpoint, "user/target.pth")
-                    torch.save(model.user_emb_table.state_dict(), user_path)
-                    item_path = os.path.join(trial_checkpoint, "item/target.pth")
-                    torch.save(model.item_emb_table.state_dict(), item_path)
+                    save_lightgcn_emb_checkpoint(model, trial_checkpoint)
                     break
 
     if config["enable_profile"]:
