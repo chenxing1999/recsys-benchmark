@@ -190,7 +190,10 @@ def save_lightgcn_emb_checkpoint(
     checkpoint_dir: str,
     name: str = "target",
 ):
-    """Wrapper to save checkpoint embedding to a folder"""
+    """Wrapper to save checkpoint embedding to a folder
+    in the belowing format:
+        {checkpoint_dir}/{field_name}/{name}.pth
+    """
     embs: List[IEmbedding]
     field_names: List[str]
     if isinstance(model, LightGCN):
