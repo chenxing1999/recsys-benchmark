@@ -211,3 +211,25 @@ def save_lightgcn_emb_checkpoint(
 
         path = os.path.join(field_dir, f"{name}.pth")
         torch.save(emb.state_dict(), path)
+
+
+def get_sparsity_and_param(model: Union[LightGCN, SingleLightGCN]):
+    """Get sparsity of model"""
+
+    max_params: int
+    embs: List[IEmbedding]
+    if isinstance(model, LightGCN):
+        embs = [model.user_emb_table, model.item_emb_table]
+        max_params = (model._num_user + model._num_item) * model._hidden_size
+    elif isinstance(model, SingleLightGCN):
+        embs = [model.emb_table]
+        max_params = (model._num_user + model._num_item) * model._hidden_size
+    else:
+        raise ValueError()
+
+    num_params = 0
+    for emb in embs:
+        num_params += emb.get_num_params()
+
+    sparsity = num_params / max_params
+    return sparsity, num_params
