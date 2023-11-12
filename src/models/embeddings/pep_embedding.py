@@ -126,6 +126,11 @@ class PepEmbeeding(IEmbedding):
         else:
             return 1 - n_params / total_params
 
+    def get_num_params(self) -> int:
+        sparse_weight = self.soft_threshold(self.emb.weight, self.s)
+        n_params = torch.nonzero(sparse_weight).size(0)
+        return n_params
+
     def train_callback(self):
         """Callback to save weight to `checkpoint_weight_dir`"""
         with torch.no_grad():
@@ -218,3 +223,6 @@ class RetrainPepEmbedding(IEmbedding):
         if get_n_params:
             return self.sparsity, self._nnz
         return self.sparsity
+
+    def get_num_params(self):
+        return self._nnz

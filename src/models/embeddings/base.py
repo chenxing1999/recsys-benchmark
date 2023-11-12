@@ -1,5 +1,6 @@
 from typing import List, Optional, Union
 
+import torch
 from torch import nn
 
 
@@ -10,8 +11,11 @@ class IEmbedding(nn.Module):
     but usually get higher accuracy.
     """
 
-    def get_weight(self):
+    def get_weight(self) -> torch.Tensor:
         ...
+
+    def get_num_params(self) -> int:
+        return sum([p.numel() for p in self.parameters()])
 
 
 class VanillaEmbedding(IEmbedding):

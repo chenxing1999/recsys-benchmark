@@ -206,6 +206,12 @@ class OptEmbed(IOptEmbed):
             return sparsity, nnz
         return sparsity
 
+    def get_num_params(self):
+        emb = self._mask_e_module(self._weight)
+        nnz = torch.nonzero(emb).size(0)
+        nnz = int(nnz)
+        return nnz
+
 
 # Evo
 Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask"])
@@ -600,3 +606,6 @@ class RetrainOptEmbed(IOptEmbed):
         if not get_n_params:
             return sparsity
         return sparsity, nnz
+
+    def get_num_params(self):
+        return torch.nonzero(self._mask).size(0)

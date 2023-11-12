@@ -18,7 +18,7 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
 from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
-from src.models.lightgcn import save_lightgcn_emb_checkpoint
+from src.models.lightgcn import get_sparsity_and_param, save_lightgcn_emb_checkpoint
 from src.trainer.lightgcn import train_epoch, validate_epoch
 from src.utils import set_seed
 
@@ -332,15 +332,7 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
 
             if not is_pep_retrain:
                 # get sparsity and store weight if possible
-                user_sparsity = model.user_emb_table.get_sparsity()
-                logger.log_metric("sparsity/user", user_sparsity, epoch_idx)
-
-                item_sparsity = model.item_emb_table.get_sparsity()
-                logger.log_metric("sparsity/item", item_sparsity, epoch_idx)
-
-                sparsity = (num_users * user_sparsity + num_items * item_sparsity) / (
-                    num_users + num_items
-                )
+                sparsity = get_sparsity_and_param(model)[0]
 
                 # Check if sparsity is low enough and save result mask
                 model.item_emb_table.train_callback()
@@ -356,12 +348,7 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
         val_prof.stop()
 
     # get best metric
-    user_sparsity = model.user_emb_table.get_sparsity()
-    item_sparsity = model.item_emb_table.get_sparsity()
-
-    sparsity = (num_users * user_sparsity + num_items * item_sparsity) / (
-        num_users + num_items
-    )
+    sparsity = get_sparsity_and_param(model)[0]
 
     # if sparsity < target_sparsity:
     #     raise optuna.TrialPruned()
