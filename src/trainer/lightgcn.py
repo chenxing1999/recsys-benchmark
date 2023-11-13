@@ -9,6 +9,7 @@ from src import metrics as metric_utils
 from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore
+from src.models.lightgcn import LightGCN, SingleLightGCN, get_sparsity_and_param
 
 
 def train_epoch(
@@ -191,3 +192,132 @@ def validate_epoch(
         return {
             "ndcg": ndcg,
         }
+
+
+def train_epoch_optembed(
+    dataloader: DataLoader,
+    model: IGraphBaseCore,
+    optimizers: List[torch.optim.Optimizer],
+    device="cuda",
+    log_step=10,
+    weight_decay=0,
+    profiler=None,
+    info_nce_weight=0,
+    alpha=0,
+) -> Dict[str, float]:
+    """Custom training logic for LightGCN OptEmbed
+
+    Customization have been done:
+        - Add `alpha` (weight for l_s)
+        - Use multiple optimizers instead of one.
+    """
+    adj = dataloader.dataset.get_norm_adj()
+    assert isinstance(model, (LightGCN, SingleLightGCN))
+
+    model.train()
+    model.to(device)
+    adj = adj.to(device)
+
+    loss_dict = dict(
+        loss=0,
+        reg_loss=0,
+        rec_loss=0,
+        cl_loss=0,
+        loss_s=0,
+    )
+    for idx, batch in enumerate(dataloader):
+        users, pos_items, neg_items = batch
+        all_user_emb, all_item_emb = model(adj)
+
+        users = users.to(device)
+        pos_items = pos_items.to(device)
+        neg_items = neg_items.to(device)
+
+        user_embs = torch.index_select(all_user_emb, 0, users)
+        pos_embs = torch.index_select(all_item_emb, 0, pos_items)
+        neg_embs = torch.index_select(all_item_emb, 0, neg_items)
+
+        rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
+
+        reg_loss = 0
+        if weight_decay > 0:
+            reg_loss = model.get_reg_loss(users, pos_items, neg_items)
+            loss_dict["reg_loss"] += reg_loss.item()
+
+        # Enable SGL-Without Augmentation for faster converge
+        info_nce_loss = 0
+        if info_nce_weight > 0:
+            temperature = 0.2
+
+            tmp_user_idx = torch.unique(users)
+            tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
+
+            tmp_pos_idx = torch.unique(pos_items)
+            tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
+            view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
+
+            info_nce_loss = info_nce(view1, view1, temperature)
+
+            info_nce_loss = info_nce_loss * info_nce_weight
+            loss_dict["cl_loss"] += info_nce_loss.item()
+
+        loss = rec_loss + weight_decay * reg_loss + info_nce_loss
+        if isinstance(model, LightGCN):
+            loss_s = model.user_emb_table.get_l_s()
+            loss_s = loss_s + model.item_emb_table.get_l_s()
+        elif isinstance(model, SingleLightGCN):
+            loss_s = model.emb_table.get_l_s()
+        else:
+            raise ValueError()
+        loss = loss + alpha * loss_s
+
+        for optimizer in optimizers:
+            optimizer.zero_grad()
+        loss.backward()
+        for optimizer in optimizers:
+            optimizer.step()
+
+        loss_dict["loss_s"] += loss_s.item()
+        loss_dict["loss"] += loss.item()
+
+        # Logging
+        if log_step and idx % log_step == 0:
+            msg = f"Idx: {idx}"
+            sparsity, n_params = get_sparsity_and_param(model)
+
+            msg += f" - {sparsity=:.4f} - {n_params=}"
+
+            for metric, value in loss_dict.items():
+                if value > 0:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.4}"
+
+            logger.info(msg)
+
+            # DEBUG CODE ---
+            t_param = model.item_emb_table._mask_e_module._t_param
+            print(
+                f"Threshold --- "
+                f"Max: {t_param.max()}"
+                f"- Min: {t_param.min()}"
+                f"- Mean: {t_param.mean()}"
+            )
+            norm = model.item_emb_table._weight.norm(1, dim=1)
+            print(
+                f"Norm --- "
+                f"Max: {norm.max()}"
+                f"- Min: {norm.min()}"
+                f"- Mean: {norm.mean()}"
+            )
+
+        if profiler:
+            profiler.step()
+
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        loss_dict[metric] = avg
+
+    sparsity, n_params = get_sparsity_and_param(model)
+    loss_dict["sparsity"] = sparsity
+    loss_dict["n_params"] = n_params
+    return loss_dict
