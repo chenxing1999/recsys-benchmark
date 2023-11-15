@@ -104,4 +104,5 @@ class DeepFM(nn.Module):
         field_dims = checkpoint["field_dims"]
 
         model = cls(field_dims, **model_config)
+        model.load_state_dict(checkpoint["state_dict"])
         return model
