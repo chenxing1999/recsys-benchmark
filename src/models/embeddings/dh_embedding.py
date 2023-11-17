@@ -3,9 +3,9 @@ import os
 from typing import Final, List, Optional, Union
 
 import torch
+from loguru import logger
 from torch import nn
 from torch.nn import functional as F
-from loguru import logger
 
 from .base import IEmbedding
 
