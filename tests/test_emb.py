@@ -81,6 +81,7 @@ GENERAL_EMB = [
     if (
         not name.startswith("pep")
         and not name.startswith("deepfm")
+        and name != "cerp_retrain"
         and name != "tt_emb"
     )
 ]
