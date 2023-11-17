@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 
 from .base import IEmbedding, VanillaEmbedding
-from .cerp_embedding import CerpEmbedding
+from .cerp_embedding import CerpEmbedding, RetrainCerpEmbedding
 from .deepfm_opt_embed import OptEmbed as DeepFMOptEmbed
 from .deepfm_opt_embed import RetrainOptEmbed as DeepFMRetrainOptEmbed
 from .dh_embedding import DHEmbedding
@@ -27,6 +27,7 @@ NAME_TO_CLS = {
     "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
     "tt_emb": TTEmbedding,
     "cerp": CerpEmbedding,
+    "cerp_retrain": RetrainCerpEmbedding,
 }
 
 
@@ -54,7 +55,7 @@ def get_embedding(
     elif name not in name_to_cls:
         raise NotImplementedError(f"{name} not found in mapping from name to class")
     else:
-        if name.startswith("pep"):
+        if name.startswith("pep") or name.startswith("cerp"):
             embedding_config["field_name"] = field_name
         if name == "optembed_d" or name == "optembed_d_retrain":
             embedding_config["t_init"] = None
