@@ -1,4 +1,4 @@
-"""Training code and utils code for CerpEmbedding.
+"""Training code and utils code for CerpEmbedding with LightGCN and SingleLightGCN.
 Create seperate file to avoid circular importing"""
 
 from typing import Dict, Tuple, Union
@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from src.losses import bpr_loss_multi, info_nce
 from src.models import IGraphBaseCore
-from src.models.lightgcn import LightGCN, SingleLightGCN
+from src.models.lightgcn import LightGCN, SingleLightGCN, get_sparsity_and_param
 
 
 def get_prune_and_reg_loss_lightgcn(
@@ -62,22 +62,6 @@ def get_prune_and_reg_loss_lightgcn(
     return prune_loss, reg_loss
 
 
-def get_sparsity(model: Union[LightGCN, SingleLightGCN]) -> Tuple[float, int]:
-    """Wrapper for get sparsity and num params of model with CerpEmbedding"""
-    if isinstance(model, LightGCN):
-        _, user_num_params = model.user_emb_table.get_sparsity(True)
-        _, item_num_params = model.item_emb_table.get_sparsity(True)
-        max_params = model._hidden_size * (model._num_user + model._num_item)
-        num_params = user_num_params + item_num_params
-        return 1 - num_params / max_params, num_params
-
-    elif isinstance(model, SingleLightGCN):
-        sparsity, num_params = model.emb_table.get_sparsity(True)
-    else:
-        raise ValueError(f"Not supported model for prune loss {model}")
-    return sparsity, num_params
-
-
 def train_epoch_cerp(
     dataloader: DataLoader,
     model: IGraphBaseCore,
@@ -128,7 +112,7 @@ def train_epoch_cerp(
 
         rec_loss = bpr_loss_multi(user_embs, pos_embs, neg_embs)
 
-        reg_loss, prune_loss = get_prune_and_reg_loss_lightgcn(
+        prune_loss, reg_loss = get_prune_and_reg_loss_lightgcn(
             model, users, pos_items, neg_items.flatten()
         )
         loss_dict["reg_loss"] += reg_loss.item()
@@ -174,9 +158,32 @@ def train_epoch_cerp(
         if log_step and idx % log_step == 0:
             msg = f"Idx: {idx}"
 
-            sparsity, num_params = get_sparsity(model)
+            sparsity, num_params = get_sparsity_and_param(model)
             loss_dict["sparsity"] = sparsity
             loss_dict["num_params"] = num_params
+
+            # with torch.no_grad():
+            #     norm = model.emb_table.p_weight.norm(2, 1)
+            #     threshold = model.emb_table.p_threshold
+            #     print(
+            #         f"P Norm -- max: {norm.max()}"
+            #         f"- min: {norm.min()} - mean: {norm.mean()}"
+            #     )
+            #     print(
+            #         f"P threshold -- max: {threshold.max()}"
+            #         f"- min: {threshold.min()} - mean: {threshold.mean()}"
+            #     )
+
+            #     norm = model.emb_table.q_weight.norm(2, 1)
+            #     threshold = model.emb_table.q_threshold
+            #     print(
+            #         f"Q Norm -- max: {norm.max()}"
+            #         f"- min: {norm.min()} - mean: {norm.mean()}"
+            #     )
+            #     print(
+            #         f"Q threshold -- max: {threshold.max()}"
+            #         f"- min: {threshold.min()} - mean: {threshold.mean()}"
+            #     )
 
             for metric, value in loss_dict.items():
                 if metric == "sparsity":

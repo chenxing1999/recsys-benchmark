@@ -126,6 +126,7 @@ class SingleLightGCN(IGraphBaseCore):
 
         self._num_user = num_user
         self._num_item = num_item
+        self._hidden_size = hidden_size
 
         if p_dropout > 0:
             self.sparse_dropout = SparseDropout(p_dropout)
@@ -231,5 +232,5 @@ def get_sparsity_and_param(model: Union[LightGCN, SingleLightGCN]):
     for emb in embs:
         num_params += emb.get_num_params()
 
-    sparsity = num_params / max_params
+    sparsity = 1 - num_params / max_params
     return sparsity, num_params

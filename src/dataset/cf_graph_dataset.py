@@ -1,5 +1,5 @@
 import random
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Set, Tuple, Union
 
 import torch
 from loguru import logger
@@ -214,7 +214,7 @@ class TestCFGraphDataset(Dataset):
     def __len__(self):
         return len(self._users)
 
-    def __getitem__(self, idx) -> Tuple[int, List[int]]:
+    def __getitem__(self, idx) -> Tuple[int, Set[int]]:
         """
         Return:
             user_id

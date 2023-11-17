@@ -17,6 +17,7 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import get_graph_model
 from src.models.embeddings.cerp_embedding_utils import train_epoch_cerp
+from src.models.lightgcn import save_lightgcn_emb_checkpoint
 from src.trainer.lightgcn import validate_epoch
 from src.utils import set_seed
 
@@ -187,7 +188,8 @@ def _main(trial, base_config):
         # threshold
         {"weight_decay": weight_decay_threshold, "params": []},
         # normal weight
-        {"weight_decay": 0, "params": []},
+        # {"weight_decay": 0, "params": []},
+        {"weight_decay": weight_decay_threshold, "params": []},
     ]
     for name, p in model.named_parameters():
         if "threshold" in name:
@@ -219,6 +221,10 @@ def _main(trial, base_config):
     gamma_init = cerp_config["gamma_init"]
     gamma_decay = cerp_config["gamma_decay"]
     target_sparsity = cerp_config["target_sparsity"]
+    trial_checkpoint = cerp_config["trial_checkpoint"]
+
+    logger.info("Save initial checkpoint")
+    save_lightgcn_emb_checkpoint(model, trial_checkpoint, "initial")
 
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -275,6 +281,8 @@ def _main(trial, base_config):
                     break
 
         if train_metrics["sparsity"] >= target_sparsity:
+            logger.info("Found target sparsity")
+            save_lightgcn_emb_checkpoint(model, trial_checkpoint)
             break
 
     trial.set_user_attr("diff_sparsity", target_sparsity - train_metrics["sparsity"])
@@ -321,6 +329,18 @@ class Callback(object):
             )
 
 
+def _create_grid_sampler():
+    search_space = {
+        "learning_rate": [1e-2, 1e-3, 1e-4],
+        "cerp_weight_decay": [1e-5, 1e-6, 1e-7],
+        "weight_decay": [0],
+        "num_layers": [4],
+        "init_threshold": [-100],
+        "info_nce_weight": [0],
+    }
+    return optuna.samplers.GridSampler(search_space, seed=2023)
+
+
 def main(argv=None):
     base_config, args = parse_args(argv)
 
@@ -329,13 +349,12 @@ def main(argv=None):
         _main(optuna.create_trial(value=0), base_config)
         return
     if args.use_tpe:
-        objective = partial(
-            lambda base_config, trial: _main(trial, base_config), base_config
-        )
+        objective = partial(_main, base_config=base_config)
         sampler = optuna.samplers.TPESampler(
             seed=2023,
             constraints_func=constraint,
         )  # Make the sampler behave in a deterministic way.
+        # sampler = _create_grid_sampler()
         kwargs = {"direction": "maximize"}
     else:
         sampler = optuna.samplers.NSGAIISampler(
@@ -358,17 +377,6 @@ def main(argv=None):
 
     logger = loguru.logger
     if not is_retrain:
-        study.enqueue_trial(
-            {
-                "learning_rate": 1e-3,
-                "weight_decay": 1e-3,
-                "init_threshold": -5,
-                "num_layers": 3,
-                "info_nce_weight": 0.1,
-                "cerp_weight_decay": 1e-2,
-            }
-        )
-
         study.optimize(objective, args.n_trials, callbacks=[callback])
 
         logger.info("Finished searching for best Pep config")
