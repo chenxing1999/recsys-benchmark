@@ -69,7 +69,7 @@ class TTEmbedding(IEmbedding):
 
         offsets = torch.arange(0, size + 1, step=step, device=device)
 
-        results = self._tt_emb(x, offsets, warmup=warmup)
+        results = self._tt_emb(x, offsets)
 
         if is_flatten and self._mode is None:
             results = results.reshape(b, n, self._hidden_size)

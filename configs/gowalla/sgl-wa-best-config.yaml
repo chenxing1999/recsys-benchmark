@@ -1,0 +1,58 @@
+checkpoint_path: checkpoints/gowalla/sgl-wa.pth
+enable_profile: false
+info_nce_weight: 0.9
+learning_rate: 0.006121107999012724
+log_step: 100
+logger:
+  level: INFO
+  log_folder: logs/sgl-wa-base-gowalla/
+  log_name: lr0.0061-decay0.0062-num_layers4-info_nce0.9000
+model:
+  embedding_config:
+    name: vanilla
+  hidden_size: 64
+  name: lightgcn
+  num_layers: 4
+  p_dropout: 0.0
+num_epochs: 40
+profilers:
+  train_profiler:
+    log_path: logs/lightgcn/train
+    profile_memory: true
+    record_shapes: true
+    schedule:
+      active: 3
+      repeat: 2
+      wait: 1
+      warmup: 1
+    with_stack: false
+  val_profiler:
+    log_path: logs/lightgcn/val
+    profile_memory: true
+    record_shapes: true
+    schedule:
+      active: 3
+      repeat: 2
+      wait: 1
+      warmup: 1
+    with_stack: true
+run_test: true
+test_dataloader:
+  batch_size: 2048
+  dataset:
+    path: dataset/cf/gowalla/test.txt
+  num_workers: 4
+train_dataloader:
+  batch_size: 2048
+  dataset:
+    adj_style: lightgcn
+    path: dataset/cf/gowalla/model_train.txt
+    sampling_method: popularity
+  num_workers: 4
+val_dataloader:
+  batch_size: 2048
+  dataset:
+    path: dataset/cf/gowalla/model_val.txt
+  num_workers: 4
+validate_step: 1
+weight_decay: 0.006213980130072126

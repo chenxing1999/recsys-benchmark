@@ -3,6 +3,7 @@ import os
 from typing import Final, List, Optional, Union
 
 import torch
+from loguru import logger
 from torch import nn
 from torch.nn import functional as F
 
@@ -28,6 +29,7 @@ class DHEmbedding(IEmbedding):
         use_bn: bool = True,
         cached: bool = True,
         prime_file: Optional[str] = None,
+        cache_path: str = "",
     ):
         """
         Args:
@@ -41,6 +43,8 @@ class DHEmbedding(IEmbedding):
 
             prime_file: Contains list of possible value for p
                 (prime number precomputed that are larger than 1e6)
+
+            cache_path: Path to hashed value initialization
         """
         super().__init__()
 
@@ -87,9 +91,15 @@ class DHEmbedding(IEmbedding):
         self._use_bn = use_bn
 
         self._mode = mode
+        logger.debug(f"Num params: {self.get_num_params()}")
 
         if cached:
-            self._init_all_hash()
+            if os.path.exists(cache_path):
+                self._cache = torch.load(cache_path)
+            else:
+                self._init_all_hash()
+                if cache_path:
+                    torch.save(self._cache, cache_path)
 
     def get_weight(self):
         arr = torch.arange(

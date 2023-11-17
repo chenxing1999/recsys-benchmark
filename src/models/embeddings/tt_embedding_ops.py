@@ -92,6 +92,18 @@ class BufferList(nn.Module):
         return getattr(self, self._name + str(index))
 
 
+def get_num_params(
+    tt_p_shapes: List[int],
+    tt_q_shapes: List[int],
+    tt_ranks: List[int],
+):
+    num_params = 0
+    num_ranks = len(tt_p_shapes)
+    for i in range(num_ranks):
+        num_params += tt_p_shapes[i] * tt_q_shapes[i] * tt_ranks[i] * tt_ranks[i + 1]
+    return num_params
+
+
 def tt_matrix_to_full(
     tt_p_shapes: List[int],
     tt_q_shapes: List[int],
@@ -559,6 +571,13 @@ class TableBatchedTTEmbeddingBag(torch.nn.Module):
                     dtype=torch.float32,
                 )
             )
+
+        n_params: int = get_num_params(
+            self.tt_p_shapes,
+            self.tt_q_shapes,
+            self.tt_ranks,
+        )
+        logger.info(f"Num Params: {n_params}")
         self.reset_parameters(weight_dist)
         self.use_cache = use_cache
         if use_cache:
@@ -838,9 +857,7 @@ class TableBatchedTTEmbeddingBag(torch.nn.Module):
             # pyre-fixme[16]
             tt_embeddings.update_cache_state(indices, self.hashtbl, self.cache_freq)
 
-    def forward(
-        self, indices: torch.Tensor, offsets: torch.Tensor, warmup: bool = True
-    ) -> torch.Tensor:
+    def forward(self, indices: torch.Tensor, offsets: torch.Tensor) -> torch.Tensor:
         (indices, offsets) = indices.long(), offsets.long()
 
         # update hash table and lfu state
@@ -950,9 +967,5 @@ class TTEmbeddingBag(TableBatchedTTEmbeddingBag):
             enforce_embedding_dim,
         )
 
-    def forward(
-        self, indices: torch.Tensor, offsets: torch.Tensor, warmup: bool = True
-    ) -> torch.Tensor:
-        return super().forward(indices, offsets, warmup)[
-            0
-        ]  # there should be only one table
+    def forward(self, indices: torch.Tensor, offsets: torch.Tensor) -> torch.Tensor:
+        return super().forward(indices, offsets)[0]  # there should be only one table
