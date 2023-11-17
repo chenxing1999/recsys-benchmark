@@ -1,7 +1,7 @@
 """Script to run OptEmbed Evolutionary search for LightGCN-based model"""
 import argparse
 import os
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import yaml
@@ -16,17 +16,20 @@ from src.utils import set_seed
 set_seed(2023)
 
 
-def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
+def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, Optional[float]]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
+    parser.add_argument(
+        "--target-sparsity", default=None, help="Target expected sparsity", type=float
+    )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
-    return config
+    return config, args.target_sparsity
 
 
 def main(argv: Optional[Sequence[str]] = None):
-    config = get_config(argv)
+    config, target_sparsity = get_config(argv)
     logger = Logger(**config["logger"])
 
     # Loading train dataset
@@ -93,7 +96,7 @@ def main(argv: Optional[Sequence[str]] = None):
         k,
         val_dataloader,
         train_dataset,
-        target_sparsity=None,
+        target_sparsity=target_sparsity,
         naive=False,
     )
     nnz = (best_item_mask + 1).sum() + (best_user_mask + 1).sum()
