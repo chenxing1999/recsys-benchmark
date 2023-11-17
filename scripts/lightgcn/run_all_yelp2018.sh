@@ -62,6 +62,8 @@ python scripts/lightgcn/run_l2_benchmark.py configs/yelp2018/sgl-wa-best-config.
 
 # TT-Rec
 python scripts/exp_find_hparams.py -c configs/yelp2018/tt-emb-96-96.yaml -l logs/lightgcn/tt-emb-96-96 -p checkpoints/lightgcn/tt-emb-96-96.pth
-# DHE
+
+# DHE (80%)
+python scripts/exp_find_hparams.py -c configs/yelp2018/dhe-256-256-128-128.yaml -l logs/lightgcn/dhe-80 -p checkpoints/lightgcn/dhe-80.pth
 
 # Quantization
