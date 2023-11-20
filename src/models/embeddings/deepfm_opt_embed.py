@@ -301,7 +301,20 @@ class OptEmbed(IOptEmbed):
 Candidate = DeepFMCandidate = namedtuple("Candidate", ["save_mask", "extra"])
 
 
-def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
+def _generate_candidate(emb: OptEmbed, target_sparsity=None, method=0):
+    """Generate Candidate for DeepFM mask D
+
+    Args:
+        emb
+        target_sparsity: Target sparsity to get
+            only sample candidate when the sparsity lower than target
+
+        method:
+            0: Uniform (original in paper)
+            1: exponential
+            2: linear
+
+    """
     hidden_size = emb._hidden_size
     mode_threshold_d = emb._mode_d
 
@@ -322,7 +335,7 @@ def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
         target_sparsity,
         hidden_size,
         size,
-        naive,
+        method,
     )
 
     # Get true field dims per fields
@@ -404,7 +417,7 @@ def _mutate(
     p_mutate: float,
     hidden_size: int,
     target_sparsity: Optional[float] = None,
-    naive=False,
+    method=0,
 ) -> List[Candidate]:
     result = []
 
@@ -420,7 +433,7 @@ def _mutate(
                 target_sparsity,
                 hidden_size,
                 num_mutated,
-                naive,
+                method,
             )
 
             candidate = Candidate(son_mask, parent[1])
@@ -459,7 +472,7 @@ def evol_search_deepfm(
     val_dataloader,
     train_dataset,
     target_sparsity=None,
-    naive=False,
+    method=1,
 ) -> Tuple[torch.LongTensor, torch.LongTensor, float]:
     """Evolutionary search for DeepFM with OptEmbed
 
@@ -478,8 +491,10 @@ def evol_search_deepfm(
             as num_item, num_users, ...
 
         target_sparsity: Maximum sparsity accepted
-        naive: Generate with target sparsity with linearly
-            reduce max hidden size
+        method: Generate candidate with target sparsity
+            0: Uniform (original in paper)
+            1: exponential
+            2: linear
 
     Returns:
         best_mask: (torch.LongTensor, shape (num_items,))
@@ -500,6 +515,7 @@ def evol_search_deepfm(
         _generate_candidate(
             model.embedding,
             target_sparsity,
+            method,
         )
         for _ in range(population)
     ]
@@ -547,6 +563,7 @@ def evol_search_deepfm(
                 p_mutate,
                 hidden_size,
                 target_sparsity,
+                method,
             )
             candidates.extend(mutates)
 
