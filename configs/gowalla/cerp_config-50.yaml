@@ -1,0 +1,86 @@
+# Config used with weight decay included for all weight (diff from l2 regularization)
+# epoch - 10, ndcg: 0.0290
+model:
+  name: lightgcn # lightgcn,hccf
+  num_layers: 4
+  hidden_size: 64
+  p_dropout: 0.0
+  embedding_config:
+    name: cerp
+    bucket_size: 10000
+    threshold_init: -50
+
+train_dataloader:
+  dataset:
+    path: dataset/cf/gowalla/model_train.txt
+    adj_style: lightgcn # lightgcn or hccf
+    sampling_method: popularity
+    num_neg_item: 5
+  num_workers: 4
+  batch_size: 10
+
+val_dataloader:
+  dataset:
+    path: dataset/cf/gowalla/model_val.txt
+  batch_size: 2048
+  num_workers: 4
+
+test_dataloader:
+  dataset:
+    path: dataset/cf/gowalla/test.txt
+  batch_size: 2048
+  num_workers: 4
+
+run_test: false
+
+checkpoint_path: checkpoints/checkpoint.pth
+num_epochs: 40
+log_step: 100
+
+cerp:
+  # gamma_init: 0.001
+  target_sparsity: 0.5
+  gamma_init: 0.0001
+  gamma_decay: 0.5
+  weight_decay: 0.00001
+  best_checkpoint_dir: checkpoints/cerp/best/
+  trial_checkpoint: checkpoints/cerp/trial/
+  is_retrain: False
+
+# weight_decay: 0.1
+weight_decay: 0.00000
+info_nce_weight: 0.1
+# info_nce_weight: 0.0
+learning_rate: 0.001
+validate_step: 1
+
+enable_profile: false
+
+profilers:
+  train_profiler:
+    log_path: logs/lightgcn/train
+    # Check pytorch document on profiler for more information
+    # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+  val_profiler:
+    log_path: logs/lightgcn/val
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: true
+
+logger:
+  level: INFO
+  log_folder: logs/cerp
+  log_name: original
