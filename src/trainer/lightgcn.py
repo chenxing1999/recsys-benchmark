@@ -295,20 +295,20 @@ def train_epoch_optembed(
             logger.info(msg)
 
             # DEBUG CODE ---
-            t_param = model.item_emb_table._mask_e_module._t_param
-            print(
-                f"Threshold --- "
-                f"Max: {t_param.max()}"
-                f"- Min: {t_param.min()}"
-                f"- Mean: {t_param.mean()}"
-            )
-            norm = model.item_emb_table._weight.norm(1, dim=1)
-            print(
-                f"Norm --- "
-                f"Max: {norm.max()}"
-                f"- Min: {norm.min()}"
-                f"- Mean: {norm.mean()}"
-            )
+            # t_param = model.item_emb_table._mask_e_module._t_param
+            # print(
+            #     f"Threshold --- "
+            #     f"Max: {t_param.max()}"
+            #     f"- Min: {t_param.min()}"
+            #     f"- Mean: {t_param.mean()}"
+            # )
+            # norm = model.item_emb_table._weight.norm(1, dim=1)
+            # print(
+            #     f"Norm --- "
+            #     f"Max: {norm.max()}"
+            #     f"- Min: {norm.min()}"
+            #     f"- Mean: {norm.mean()}"
+            # )
 
         if profiler:
             profiler.step()
