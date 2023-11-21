@@ -39,8 +39,8 @@ test_dataloader:
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm/deepfm_checkpoint_opt.pth
-Num_epochs: 15
+checkpoint_path: checkpoints/deepfm_checkpoint_opt.pth
+num_epochs: 15
 log_step: 1000
 
 weight_decay: 0.001
