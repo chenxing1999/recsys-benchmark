@@ -5,8 +5,7 @@ import torch
 import yaml
 from torch.utils.data import DataLoader
 
-from src.dataset.criteo import CriteoDataset, CriteoIterDataset
-from src.dataset.criteo.criteo_torchfm import CriteoDataset as CriteoFMData
+from src.dataset import get_ctr_dataset
 from src.loggers import Logger
 from src.models.deepfm import DeepFM
 
@@ -29,25 +28,6 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
     return config
 
 
-def get_dataset_cls(loader_config) -> str:
-    num_workers = loader_config.get("num_workers", 0)
-    shuffle = loader_config.get("shuffle", False)
-
-    if "train_test_info" in loader_config["dataset"]:
-        return "torchfm"
-    if num_workers == 0 and not shuffle:
-        return "iter"
-    else:
-        return "normal"
-
-
-NAME_TO_DATASET_CLS = {
-    "iter": CriteoIterDataset,
-    "normal": CriteoDataset,
-    "torchfm": CriteoFMData,
-}
-
-
 def main(argv: Optional[Sequence[str]] = None):
     config = get_config(argv)
     logger = Logger(**config["logger"])
@@ -56,24 +36,15 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info("Load train dataset...")
 
     train_dataloader_config = config["train_dataloader"]
-    train_dataset_cls = get_dataset_cls(train_dataloader_config)
-    logger.info(f"Train dataset type: {train_dataset_cls}")
-
-    train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset_cls = NAME_TO_DATASET_CLS[train_dataset_cls]
-    train_dataset = train_dataset_cls(**train_dataset_config)
+    train_dataset = get_ctr_dataset(train_dataloader_config)
+    logger.info("Finished load train dataset")
 
     logger.info("Load val dataset...")
     val_dataloader_config = config["val_dataloader"]
-    val_dataset_config = val_dataloader_config["dataset"]
+    val_dataloader_config["dataset"]
 
     # TODO: Refactor later
-    val_dataset_cls = get_dataset_cls(val_dataloader_config)
-    logger.info(f"Val dataset type: {val_dataset_cls}")
-    val_dataset_cls = NAME_TO_DATASET_CLS[val_dataset_cls]
-    train_info_to_val = train_dataset.pop_info()
-
-    val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
+    val_dataset = get_ctr_dataset(val_dataloader_config, train_dataset.pop_info())
     val_dataset.pop_info()
 
     val_dataloader = DataLoader(
