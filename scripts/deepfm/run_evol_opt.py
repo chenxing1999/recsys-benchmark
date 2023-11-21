@@ -114,7 +114,7 @@ def main(argv: Optional[Sequence[str]] = None):
         val_dataloader,
         train_dataset,
         target_sparsity=None,
-        naive=False,
+        method=0,
     )
 
     init_weight_path = config["opt_embed"]["init_weight_path"]

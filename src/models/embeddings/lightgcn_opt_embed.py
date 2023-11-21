@@ -218,7 +218,7 @@ Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask
 
 
 def _generate_lightgcn_candidate(
-    num_user, num_item, hidden_size, target_sparsity=None, method=False
+    num_user: int, num_item: int, hidden_size: int, target_sparsity=None, method=0
 ):
     candidate = LightGCNCandidate(
         user_mask=_sampling_by_weight(

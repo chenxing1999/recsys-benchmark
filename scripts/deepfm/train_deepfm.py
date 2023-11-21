@@ -113,16 +113,6 @@ def main(argv: Optional[Sequence[str]] = None):
     else:
         device = "cpu"
 
-    if config["run_test"]:
-        checkpoint = torch.load(config["checkpoint_path"])
-        model.load_state_dict(checkpoint["state_dict"])
-
-        val_metrics = validate_epoch(val_dataloader, model, device)
-        for key, value in val_metrics.items():
-            logger.info(f"{key} - {value:.4f}")
-
-        return
-
     if "deepfm_optembed_retrain" in config["model"]["embedding_config"]["name"]:
         logger.info("DeepFM OptEmbed Retrain detected")
         init_weight_path = config["opt_embed"]["init_weight_path"]
@@ -131,6 +121,17 @@ def main(argv: Optional[Sequence[str]] = None):
         keys = model.load_state_dict(info["full"], False)
         assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
         model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
+        logger.info(f"Num params: {model.embedding.get_num_params()}")
+
+    if config["run_test"]:
+        checkpoint = torch.load(config["checkpoint_path"])
+        model.load_state_dict(checkpoint["state_dict"], False)
+
+        val_metrics = validate_epoch(val_dataloader, model, device)
+        for key, value in val_metrics.items():
+            logger.info(f"{key} - {value:.4f}")
+
+        return
 
     optimizer = torch.optim.Adam(
         model.parameters(),

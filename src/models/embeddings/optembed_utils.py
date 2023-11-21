@@ -3,6 +3,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from loguru import logger
 from torch import nn
 
 
@@ -107,8 +108,8 @@ class _MaskEmbeddingModule(nn.Module):
 
 @lru_cache(1)
 def _find_alpha(
-    target_sparsity,
-    hidden_size,
+    target_sparsity: float,
+    hidden_size: int,
     step=0.1,
     eps=1e-6,
     num_step=100,
@@ -121,6 +122,7 @@ def _find_alpha(
     elif target_sparsity == 0.5:
         return 1
 
+    logger.debug(f"find_alpha with {target_sparsity=} - {hidden_size=}")
     # brute force find alpha with gradient descend :))))
     if target_sparsity > 0.5:
         alpha = torch.tensor(1.1, requires_grad=True)
@@ -133,18 +135,22 @@ def _find_alpha(
         # To increase sparsity -> increase alpha
         diff = expected_sparsity - target_sparsity
         if abs(diff) < eps and diff > 0:
-            return alpha.item()
+            alpha = alpha.item()
+            logger.debug(f"found {alpha=} with diff={diff.item()}")
+            return alpha
 
         alpha.grad = None
         diff = diff**2
         diff.backward()
         alpha.data -= step * alpha.grad
 
-    return alpha.item()
+    alpha = alpha.item()
+    logger.debug(f"found {alpha=} with diff={diff.item()}")
+    return alpha
 
 
 def _get_expected_hidden_size(
-    alpha: Union[float, torch.Tensor], max_hidden_size
+    alpha: Union[float, torch.Tensor], max_hidden_size: int
 ) -> Union[float, torch.Tensor]:
     """Quick function to calculate expected hidden size sampling from
     p_i = alpha^(h - i), with p_i is prob of sample i hidden size
@@ -172,7 +178,7 @@ def _sampling_by_weight(
     target_sparsity: Optional[int],
     hidden_size: int,
     num_item: int,
-    method=0,
+    method=2,
     device=None,
 ):
     """Sampling mask d based on given input
@@ -182,7 +188,7 @@ def _sampling_by_weight(
             uniform distribution
 
     """
-    if target_sparsity is None:
+    if target_sparsity is None or method == 0 or num_item == 0:
         return torch.randint(0, hidden_size, (num_item,), device=device)
 
     if method == 2:
