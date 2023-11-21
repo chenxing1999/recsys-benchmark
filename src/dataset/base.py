@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-class ICTRDataset(Dataset[Tuple[torch.Tensor, int]], ABC):
+class ICTRDataset(Dataset[Tuple[torch.Tensor, float]], ABC):
     field_dims: Iterable[int]
 
     @abstractmethod

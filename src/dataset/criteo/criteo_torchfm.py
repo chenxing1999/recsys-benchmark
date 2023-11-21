@@ -8,12 +8,14 @@ from pathlib import Path
 
 import lmdb
 import numpy as np
-import torch.utils.data
+import torch
 from loguru import logger
 from tqdm import tqdm
 
+from ..base import ICTRDataset
 
-class CriteoDataset(torch.utils.data.Dataset):
+
+class CriteoDataset(ICTRDataset):
     """
     Criteo Display Advertising Challenge Dataset
 
