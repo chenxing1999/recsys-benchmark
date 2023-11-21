@@ -113,7 +113,7 @@ class OptEmbed(IOptEmbed):
         self.register_buffer("_full_mask_d", _full_mask_d)
 
         self._target_sparsity = target_sparsity
-        self._naive = False
+        self._method = 1
         self._mode_d = mode_threshold_d
 
     def get_l_s(self):
@@ -138,7 +138,7 @@ class OptEmbed(IOptEmbed):
                         self._target_sparsity,
                         self._hidden_size,
                         self._num_item,
-                        self._naive,
+                        self._method,
                         device,
                     )
                 elif self._mode_d == "field":
@@ -218,20 +218,20 @@ Candidate = LightGCNCandidate = namedtuple("Candidate", ["item_mask", "user_mask
 
 
 def _generate_lightgcn_candidate(
-    num_user, num_item, hidden_size, target_sparsity=None, naive=False
+    num_user: int, num_item: int, hidden_size: int, target_sparsity=None, method=0
 ):
     candidate = LightGCNCandidate(
         user_mask=_sampling_by_weight(
             target_sparsity,
             hidden_size,
             num_user,
-            naive,
+            method,
         ),
         item_mask=_sampling_by_weight(
             target_sparsity,
             hidden_size,
             num_item,
-            naive,
+            method,
         ),
     )
 
@@ -242,10 +242,10 @@ def _generate_lightgcn_candidate(
     while cur_sparsity < target_sparsity:
         candidate = LightGCNCandidate(
             user_mask=_sampling_by_weight(
-                target_sparsity * step, hidden_size, num_user
+                target_sparsity * step, hidden_size, num_user, method
             ),
             item_mask=_sampling_by_weight(
-                target_sparsity * step, hidden_size, num_item
+                target_sparsity * step, hidden_size, num_item, method
             ),
         )
         cur_sparsity = _get_sparsity(candidate, hidden_size)
@@ -334,7 +334,7 @@ def _mutate(
     num_item: int,
     hidden_size: int,
     target_sparsity: Optional[float] = None,
-    naive=False,
+    method=0,
 ) -> List[Candidate]:
     result = []
 
@@ -350,7 +350,7 @@ def _mutate(
                 target_sparsity,
                 hidden_size,
                 num_mutated,
-                naive,
+                method,
             )
             son_user = parent.user_mask.clone()
             mask = torch.rand(son_user.shape[0]) < p_mutate
@@ -359,7 +359,7 @@ def _mutate(
                 target_sparsity,
                 hidden_size,
                 num_mutated,
-                naive,
+                method,
             )
 
             candidate = Candidate(item_mask=son_item, user_mask=son_user)
@@ -401,7 +401,7 @@ def evol_search_lightgcn(
     val_dataloader,
     train_dataset,
     target_sparsity=None,
-    naive=False,
+    method=1,
 ) -> Tuple[torch.LongTensor, torch.LongTensor, float]:
     """Evolutionary search for LightGCN with OptEmbed
 
@@ -420,8 +420,10 @@ def evol_search_lightgcn(
             as num_item, num_users, ...
 
         target_sparsity: Maximum sparsity accepted
-        naive: Generate with target sparsity with linearly
-            reduce max hidden size
+        method: Generate candidate with target sparsity
+            0: Uniform (original in paper)
+            1: exponential
+            2: linear
 
     Returns:
         best_item_mask: (torch.LongTensor, shape (num_items,))
@@ -442,7 +444,13 @@ def evol_search_lightgcn(
     hidden_size = model.item_emb_table._hidden_size
 
     candidates = [
-        _generate_lightgcn_candidate(num_users, num_items, hidden_size, target_sparsity)
+        _generate_lightgcn_candidate(
+            num_users,
+            num_items,
+            hidden_size,
+            target_sparsity,
+            method,
+        )
         for _ in range(population)
     ]
 
@@ -493,6 +501,7 @@ def evol_search_lightgcn(
                 num_items,
                 hidden_size,
                 target_sparsity,
+                method,
             )
             candidates.extend(mutates)
 
@@ -548,7 +557,6 @@ class RetrainOptEmbed(IOptEmbed):
         self.register_buffer("_full_mask_d", _full_mask_d)
 
         self._target_sparsity = target_sparsity
-        self._naive = False
         self._mode_d = mode_threshold_d
 
         self._mask_d = None

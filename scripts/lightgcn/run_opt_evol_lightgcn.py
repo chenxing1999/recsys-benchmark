@@ -97,7 +97,7 @@ def main(argv: Optional[Sequence[str]] = None):
         val_dataloader,
         train_dataset,
         target_sparsity=target_sparsity,
-        naive=False,
+        method=1,
     )
     nnz = (best_item_mask + 1).sum() + (best_user_mask + 1).sum()
     total_element = len(best_item_mask) + len(best_user_mask)

@@ -249,6 +249,12 @@ class OptEmbed(IOptEmbed):
             return sparsity, nnz
         return sparsity
 
+    def get_num_params(self):
+        emb = self._mask_e_module(self._weight)
+        nnz = torch.nonzero(emb).size(0)
+        nnz = int(nnz)
+        return nnz
+
     def get_mask_e(self):
         if isinstance(self._mask_e_module, nn.Identity):
             return torch.ones(self._num_item, dtype=int)
@@ -301,7 +307,28 @@ class OptEmbed(IOptEmbed):
 Candidate = DeepFMCandidate = namedtuple("Candidate", ["save_mask", "extra"])
 
 
-def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
+def _generate_candidate(
+    emb: OptEmbed,
+    target_sparsity=None,
+    d_target_sparsity=None,
+    method=1,
+):
+    """Generate Candidate for DeepFM mask D
+
+    Args:
+        emb
+        target_sparsity: Target sparsity to get
+            only sample candidate when the sparsity lower than target
+
+        method:
+            0: Uniform (original in paper)
+            1: exponential
+            2: linear
+
+    """
+    if d_target_sparsity is None and target_sparsity is not None:
+        d_target_sparsity = target_sparsity
+
     hidden_size = emb._hidden_size
     mode_threshold_d = emb._mode_d
 
@@ -319,10 +346,10 @@ def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
 
     extra = (sub_mask, n_max)
     mask = _sampling_by_weight(
-        target_sparsity,
+        d_target_sparsity,
         hidden_size,
         size,
-        naive,
+        method,
     )
 
     # Get true field dims per fields
@@ -333,9 +360,23 @@ def _generate_candidate(emb: OptEmbed, target_sparsity=None, naive=False):
 
     if target_sparsity is None:
         return candidate
-    _get_sparsity(candidate, hidden_size)
-    # while cur_sparsity < target_sparsity:
-    #     cur_sparsity = _get_sparsity(candidate, hidden_size)
+
+    cur_sparsity = _get_sparsity(candidate, hidden_size)
+    while cur_sparsity < target_sparsity:
+        mask = _sampling_by_weight(
+            d_target_sparsity,
+            hidden_size,
+            size,
+            method,
+        )
+
+        # Get true field dims per fields
+        candidate = DeepFMCandidate(
+            save_mask=mask,
+            extra=extra,
+        )
+
+        cur_sparsity = _get_sparsity(candidate, hidden_size)
     return candidate
 
 
@@ -404,9 +445,13 @@ def _mutate(
     p_mutate: float,
     hidden_size: int,
     target_sparsity: Optional[float] = None,
-    naive=False,
+    d_target_sparsity: Optional[float] = None,
+    method=1,
 ) -> List[Candidate]:
     result = []
+
+    if target_sparsity is not None and d_target_sparsity is None:
+        d_target_sparsity = target_sparsity
 
     max_hidden_size_budget = hidden_size
     for _ in range(n_mutate):
@@ -417,10 +462,10 @@ def _mutate(
             mask = torch.rand(son_mask.shape[0]) < p_mutate
             num_mutated = mask.sum().item()
             son_mask[mask] = _sampling_by_weight(
-                target_sparsity,
+                d_target_sparsity,
                 hidden_size,
                 num_mutated,
-                naive,
+                method,
             )
 
             candidate = Candidate(son_mask, parent[1])
@@ -459,7 +504,7 @@ def evol_search_deepfm(
     val_dataloader,
     train_dataset,
     target_sparsity=None,
-    naive=False,
+    method=1,
 ) -> Tuple[torch.LongTensor, torch.LongTensor, float]:
     """Evolutionary search for DeepFM with OptEmbed
 
@@ -478,8 +523,10 @@ def evol_search_deepfm(
             as num_item, num_users, ...
 
         target_sparsity: Maximum sparsity accepted
-        naive: Generate with target sparsity with linearly
-            reduce max hidden size
+        method: Generate candidate with target sparsity
+            0: Uniform (original in paper)
+            1: exponential
+            2: linear
 
     Returns:
         best_mask: (torch.LongTensor, shape (num_items,))
@@ -491,15 +538,22 @@ def evol_search_deepfm(
     cur_top_values = None
     cur_top_candidate = []
 
-    train_dataset.field_dims
-
     assert isinstance(model.embedding, IOptEmbed)
     hidden_size = model.embedding._hidden_size
 
+    with torch.no_grad():
+        sub_mask = model.embedding.get_submask()
+
+    cur_ele_percent = sub_mask.sum() / model.embedding._num_item
+
+    d_target_sparsity = 1 - (1 - target_sparsity) / cur_ele_percent
+    logger.debug(f"{d_target_sparsity=}")
     candidates = [
         _generate_candidate(
             model.embedding,
             target_sparsity,
+            d_target_sparsity,
+            method,
         )
         for _ in range(population)
     ]
@@ -547,6 +601,8 @@ def evol_search_deepfm(
                 p_mutate,
                 hidden_size,
                 target_sparsity,
+                d_target_sparsity,
+                method,
             )
             candidates.extend(mutates)
 
@@ -595,6 +651,7 @@ class RetrainOptEmbed(IOptEmbed):
         self._mask_e = None
         self._mask = None
         self._sparsity = 0
+        self._cur_weight = None
 
     def init_mask(self, mask_e, mask_d):
         """Calculate final mask to apply to create weight"""
@@ -644,3 +701,7 @@ class RetrainOptEmbed(IOptEmbed):
         if not get_n_params:
             return sparsity
         return sparsity, nnz
+
+    def get_num_params(self):
+        nnz = torch.nonzero(self._mask).size(0)
+        return nnz
