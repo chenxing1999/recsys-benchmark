@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Iterable, Tuple
 
 import torch
 from torch.utils.data import Dataset
 
 
 class ICTRDataset(Dataset[Tuple[torch.Tensor, int]], ABC):
+    field_dims: Iterable[int]
+
     @abstractmethod
     def pop_info(self):
         ...

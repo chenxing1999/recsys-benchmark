@@ -35,7 +35,7 @@ class CerpEmbedding(IEmbedding):
 
         num_item = sum(field_dims)
 
-        self._field_dims = field_dims
+        self._field_dims = torch.tensor(field_dims)
         self._mode = mode
         self.field_name: str = field_name
 
@@ -259,7 +259,7 @@ class RetrainCerpEmbedding(IEmbedding):
 
         num_item = sum(field_dims)
 
-        self._field_dims = field_dims
+        self._field_dims = torch.tensor(field_dims)
         self._mode = mode
         self.field_name: str = field_name
         self._bucket_size = bucket_size
