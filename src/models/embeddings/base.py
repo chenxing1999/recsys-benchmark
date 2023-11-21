@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import List, Optional, Union
 
 import torch
@@ -11,6 +12,7 @@ class IEmbedding(nn.Module):
     but usually get higher accuracy.
     """
 
+    @abstractmethod
     def get_weight(self) -> torch.Tensor:
         ...
 

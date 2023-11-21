@@ -9,7 +9,7 @@ import torch
 def get_ndcg(
     y_pred: List[List[int]],
     y_true: List[Union[List[int], Set[int]]],
-    k=20,
+    k: int = 20,
 ) -> float:
     """Python implementation of Normalized Discounted Cumulative Gain
 
