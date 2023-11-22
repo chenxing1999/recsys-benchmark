@@ -7,10 +7,13 @@ from typing import Literal
 import lmdb
 import numpy as np
 import torch.utils.data
+from loguru import logger
 from tqdm import tqdm
 
+from src.dataset.base import ICTRDataset
 
-class AvazuDataset(torch.utils.data.Dataset):
+
+class AvazuDataset(ICTRDataset):
     """
     Avazu Click-Through Rate Prediction Dataset
 
@@ -138,3 +141,12 @@ class AvazuDataset(torch.utils.data.Dataset):
                     yield buffer
                     buffer.clear()
             yield buffer
+
+    def describe(self):
+        logger.info("Avazu TorchFM dataset")
+        logger.info(f"sum field dims: {sum(self.field_dims)}")
+        logger.info(f"length field dims: {len(self.field_dims)}")
+        return
+
+    def pop_info(self):
+        return {}
