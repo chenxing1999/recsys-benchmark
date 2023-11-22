@@ -25,6 +25,10 @@ class CriteoDataset(ICTRDataset):
         * Discretize numerical values by log2 transformation which is
             proposed by the winner of Criteo Competition
 
+    :param train_test_info: Path to data contains train-val-test indices
+    :param dataset_name: Literal["train", "val", "test"]
+    :param my_path: Path to load feat mappers and defaults
+
     :param dataset_path: criteo train.txt path.
     :param cache_path: lmdb cache path.
     :param rebuild_cache: If True, lmdb cache is refreshed.
