@@ -66,14 +66,14 @@ class AvazuDataset(ICTRDataset):
 
         with self.env.begin(write=False) as txn:
             self.length = txn.stat()["entries"] - 1
-            self.field_dims = np.frombuffer(txn.get(b"field_dims"), dtype=np.uint32)
+            self.field_dims = np.frombuffer(txn.get(b"field_dims"), dtype=np.uint32).astype(np.int64)
 
     def __getitem__(self, index):
         index = self._line_in_dataset[index]
         with self.env.begin(write=False) as txn:
             np_array = np.frombuffer(
                 txn.get(struct.pack(">I", index)), dtype=np.uint32
-            ).astype(dtype=np.long)
+            ).astype(dtype=np.int64)
         return np_array[1:], np_array[0]
 
     def __len__(self):

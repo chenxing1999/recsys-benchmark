@@ -17,7 +17,7 @@ NUM_FEATS: Final[int] = 22
 
 def _create_binary(
     txt_path: str,
-    min_threshold: int = 4,
+    min_threshold: int = 2,
     seed=2023,
     split_strategy=1,
 ) -> Dict[str, Any]:
@@ -212,10 +212,11 @@ class AvazuOnRam(ICTRDataset):
 
 
 if __name__ == "__main__":
-    txt_path = "/home/xing/workspace/phd/raw_data/avazu/train"
+    txt_path = "/home/hungt/tmp/train"
     line_info = "dataset/ctr/avazu/train_test_info.bin"
 
-    # binary = _create_binary(txt_path)
-    # torch.save(binary, line_info)
+    binary = _create_binary(txt_path)
+    print("Total data", sum(len(binary[k]) for k in ["train", "val", "test"]))
+    torch.save(binary, line_info)
 
-    dataset = AvazuOnRam(txt_path, line_info, "test", "dataset/ctr/avazu/ram_cache.bin")
+    # dataset = AvazuOnRam(txt_path, line_info, "test", "dataset/ctr/avazu/ram_cache.bin")
