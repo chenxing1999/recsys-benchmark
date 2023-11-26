@@ -10,6 +10,7 @@ import torch.utils.data
 from loguru import logger
 from tqdm import tqdm
 
+from src.dataset.avazu.utils import run_timestamp_preprocess
 from src.dataset.base import ICTRDataset
 
 
@@ -48,6 +49,10 @@ class AvazuDataset(ICTRDataset):
         self.min_threshold = min_threshold
 
         train_test_info = torch.load(train_test_info)
+        self._preprocess_timestamp = train_test_info.get("metadata", {}).get(
+            "preprocess_timestamp", False
+        )
+        logger.debug(f"preprocess timestamp: {self._preprocess_timestamp}")
 
         if rebuild_cache or not Path(cache_path).exists():
             shutil.rmtree(cache_path, ignore_errors=True)
@@ -66,7 +71,9 @@ class AvazuDataset(ICTRDataset):
 
         with self.env.begin(write=False) as txn:
             self.length = txn.stat()["entries"] - 1
-            self.field_dims = np.frombuffer(txn.get(b"field_dims"), dtype=np.uint32).astype(np.int64)
+            self.field_dims = np.frombuffer(
+                txn.get(b"field_dims"), dtype=np.uint32
+            ).astype(np.int64)
 
     def __getitem__(self, index):
         index = self._line_in_dataset[index]
@@ -131,10 +138,21 @@ class AvazuDataset(ICTRDataset):
                 values = line.rstrip("\n").split(",")
                 if len(values) != self.NUM_FEATS + 2:
                     continue
-                np_array = np.zeros(self.NUM_FEATS + 1, dtype=np.uint32)
+
+                extra_feats = []
+                if self._preprocess_timestamp:
+                    extra_feats = run_timestamp_preprocess(values)
+
+                n_extra = len(extra_feats)
+                np_array = np.zeros(self.NUM_FEATS + 1 + n_extra, dtype=np.uint32)
                 np_array[0] = int(values[1])
                 for i in range(1, self.NUM_FEATS + 1):
                     np_array[i] = feat_mapper[i].get(values[i + 1], defaults[i])
+
+                for i, feat in enumerate(extra_feats):
+                    idx = self.NUM_FEATS + 1 + i
+                    np_array[idx] = feat_mapper[idx].get(values[idx + 1], defaults[idx])
+
                 buffer.append((struct.pack(">I", item_idx), np_array.tobytes()))
                 item_idx += 1
                 if item_idx % buffer_size == 0:

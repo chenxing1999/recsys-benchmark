@@ -9,6 +9,7 @@ from loguru import logger
 from torch.utils.data import Subset, random_split
 from tqdm import tqdm
 
+from src.dataset.avazu.utils import run_timestamp_preprocess
 from src.dataset.base import ICTRDataset
 from src.dataset.criteo.utils import merge_feat_mapper_default
 
@@ -20,6 +21,7 @@ def _create_binary(
     min_threshold: int = 2,
     seed=2023,
     split_strategy=1,
+    preprocess_timestamp: bool = False,
 ) -> Dict[str, Any]:
     """
     Args:
@@ -35,8 +37,8 @@ def _create_binary(
         "seed": seed,
         "min_threshold": min_threshold,
         "split_strategy": split_strategy,
+        "preprocess_timestamp": preprocess_timestamp,
     }
-
 
     feat_cnts = defaultdict(lambda: defaultdict(int))
 
@@ -57,6 +59,10 @@ def _create_binary(
             label = int(values[1])
             line_indices.append(idx)
             labels.append(label)
+            if preprocess_timestamp:
+                extra_feats = run_timestamp_preprocess(values)
+                for i, feat in enumerate(extra_feats):
+                    feat_cnts[NUM_FEATS + 1 + i][feat] += 1
 
     # Note: Use list instead of set compare to original pytorch-fm
     # because list is deterministic
