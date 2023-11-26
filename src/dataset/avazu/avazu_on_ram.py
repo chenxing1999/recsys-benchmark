@@ -30,6 +30,14 @@ def _create_binary(
     Note: Copy from pytorch-fm with modification
     """
     NUM_FEATS = 22
+    metadata = {
+        "txt_path": txt_path,
+        "seed": seed,
+        "min_threshold": min_threshold,
+        "split_strategy": split_strategy,
+    }
+
+
     feat_cnts = defaultdict(lambda: defaultdict(int))
 
     line_indices = []
@@ -83,6 +91,7 @@ def _create_binary(
         "val": x_val,
         "feat_mapper": feat_mapper,
         "defaults": defaults,
+        "metadata": metadata,
     }
 
 
