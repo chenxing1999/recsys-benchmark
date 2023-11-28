@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List, Optional, Sequence
 
 import torch
@@ -106,3 +107,21 @@ class DeepFM(nn.Module):
         model = cls(field_dims, **model_config)
         model.load_state_dict(checkpoint["state_dict"])
         return model
+
+
+def save_model_checkpoint(
+    model: DeepFM,
+    checkpoint_dir: str,
+    name: str = "target",
+):
+    """Wrapper to save checkpoint embedding to a folder
+    in the belowing format:
+        {checkpoint_dir}/deepfm/{name}.pth
+    """
+
+    emb = model.embedding
+    field_dir = os.path.join(checkpoint_dir, "deepfm")
+    os.makedirs(field_dir, exist_ok=True)
+
+    path = os.path.join(field_dir, f"{name}.pth")
+    torch.save(emb.state_dict(), path)

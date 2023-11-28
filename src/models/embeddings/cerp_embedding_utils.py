@@ -74,6 +74,12 @@ def train_epoch_cerp(
     prune_loss_weight=0,
     target_sparsity=0.8,
 ) -> Dict:
+    """
+    Difference compare to original LightGCN training:
+        - Using multiple negative samples (See bpr_loss_multi)
+        - Add prune loss
+        - Check sparsity per log step
+    """
     adj = dataloader.dataset.get_norm_adj()
 
     model.train()
@@ -205,6 +211,7 @@ def train_epoch_cerp(
         avg = value / (idx + 1)
         loss_dict[metric] = avg
 
+    sparsity, num_params = get_sparsity_and_param(model)
     loss_dict["sparsity"] = sparsity
     loss_dict["num_params"] = num_params
 

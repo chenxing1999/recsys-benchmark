@@ -201,6 +201,10 @@ class CerpEmbedding(IEmbedding):
             n_params += torch.nonzero(w).size(0)
         return n_params
 
+    def get_prune_loss(self, K=100):
+        emb = self.sparse_p_weight + self.sparse_q_weight
+        return -torch.tanh(emb * K).norm(2) ** 2
+
 
 class RetrainCerpEmbedding(IEmbedding):
     def __init__(
