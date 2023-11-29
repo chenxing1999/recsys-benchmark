@@ -2,6 +2,7 @@ import os
 from typing import Dict, List, Optional, Sequence
 
 import torch
+from loguru import logger
 from torch import nn
 
 from .embeddings import IEmbedding, get_embedding
@@ -125,3 +126,69 @@ def save_model_checkpoint(
 
     path = os.path.join(field_dir, f"{name}.pth")
     torch.save(emb.state_dict(), path)
+
+
+def get_optimizers(
+    model: DeepFM,
+    config: Dict,
+) -> List[torch.optim.Optimizer]:
+    sparse: bool = config.get("sparse", False)
+    optimizer_name: str = config.get("optimizer", "adam")
+
+    lr_emb = config.get("learning_rate_emb", config["learning_rate"])
+
+    logger.debug("optimizer config: {sparse=} - {optimizer_name=} - {lr_emb=lr_emb}")
+
+    decay_param = []
+    if sparse:
+        decay_param = [
+            p for name, p in model.named_parameters() if "embedding." not in name
+        ]
+        no_decay_param = model.embedding.parameters()
+
+    if sparse and optimizer_name == "adam":
+        return [
+            torch.optim.SparseAdam(
+                no_decay_param,
+                lr=lr_emb,
+            ),
+            torch.optim.Adam(
+                decay_param,
+                lr=config["learning_rate"],
+                weight_decay=config["weight_decay"],
+            ),
+        ]
+
+    if optimizer_name == "adam":
+        return [
+            torch.optim.Adam(
+                model.parameters(),
+                lr=config["learning_rate"],
+                weight_decay=config["weight_decay"],
+            )
+        ]
+    elif optimizer_name == "sgd":
+        if not sparse:
+            return [
+                torch.optim.SGD(
+                    model.parameters(),
+                    lr=config["learning_rate"],
+                    weight_decay=config["weight_decay"],
+                )
+            ]
+        else:
+            return [
+                torch.optim.SGD(
+                    [
+                        dict(params=no_decay_param, weight_decay=0, lr=lr_emb),
+                        dict(
+                            params=decay_param,
+                            weight_decay=config["weight_decay"],
+                            lr=config["learning_rate"],
+                        ),
+                    ],
+                )
+            ]
+
+    else:
+        raise ValueError(f"{optimizer_name=} is not recognized")

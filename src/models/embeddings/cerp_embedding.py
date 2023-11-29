@@ -216,6 +216,7 @@ class RetrainCerpEmbedding(IEmbedding):
         field_name: str = "",
         weight_name: str = "target",
         bucket_size: int = 8000,
+        sparse: bool = False,
     ):
         """
         Args:
@@ -226,6 +227,8 @@ class RetrainCerpEmbedding(IEmbedding):
             field_name: Used to load the original checkpoint.
             weight_name
             bucket_size
+            sparse: Required to use with SparseAdam. See torch.Embedding documentation
+                for more information
 
         Note:
             weight will be loaded at
@@ -283,6 +286,7 @@ class RetrainCerpEmbedding(IEmbedding):
         # Q's avg entities per row = \ceiling(#entities / bucket size)
         self.q_entity_per_row = int(np.ceil(self._num_item / self._bucket_size))
         logger.debug(f"{self.q_entity_per_row=}")
+        self._sparse = sparse
 
     def load_mask(self, weight_path: str) -> List[nn.Parameter]:
         checkpoint = torch.load(weight_path, map_location="cpu")
@@ -316,21 +320,25 @@ class RetrainCerpEmbedding(IEmbedding):
 
         # get user, items' corresponding embedding vectors in Q, R matrices
         if self._mode is None:
-            batch_Q_v = F.embedding(q_idx, sparse_q_weight)
-            batch_P_v = F.embedding(p_idx, sparse_p_weight)
+            batch_Q_v = F.embedding(q_idx, sparse_q_weight, sparse=self._sparse)
+            batch_P_v = F.embedding(p_idx, sparse_p_weight, sparse=self._sparse)
 
             emb = batch_Q_v + batch_P_v
             return emb
         elif self._mode in ["sum", "mean"]:
-            batch_Q_v = F.embedding_bag(q_idx, sparse_q_weight, mode=self._mode)
-            batch_P_v = F.embedding_bag(p_idx, sparse_p_weight, mode=self._mode)
+            batch_Q_v = F.embedding_bag(
+                q_idx, sparse_q_weight, mode=self._mode, sparse=self._sparse
+            )
+            batch_P_v = F.embedding_bag(
+                p_idx, sparse_p_weight, mode=self._mode, sparse=self._sparse
+            )
 
             emb = batch_Q_v + batch_P_v
             return emb
         else:
             # mode == "max"
-            batch_Q_v = F.embedding(q_idx, sparse_q_weight)
-            batch_P_v = F.embedding(p_idx, sparse_p_weight)
+            batch_Q_v = F.embedding(q_idx, sparse_q_weight, sparse=self._sparse)
+            batch_P_v = F.embedding(p_idx, sparse_p_weight, sparse=self._sparse)
 
             emb = batch_Q_v + batch_P_v
             return emb.max(dim=1)[0]
