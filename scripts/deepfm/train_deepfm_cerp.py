@@ -2,7 +2,6 @@ import argparse
 import os
 from typing import Dict, Optional, Sequence
 
-import loguru
 import torch
 import yaml
 from torch.utils.data import DataLoader
@@ -10,79 +9,12 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset.criteo import get_dataset_cls
 from src.loggers import Logger
-from src.models.deepfm import DeepFM
-from src.trainer.deepfm import validate_epoch
+from src.models.deepfm import DeepFM, save_model_checkpoint
+from src.trainer.deepfm import train_epoch_cerp, validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
 TARGET_SPARSITY = 1300
-
-
-def train_epoch(
-    dataloader: DataLoader,
-    model: DeepFM,
-    optimizer,
-    device="cuda",
-    log_step=10,
-    profiler=None,
-    clip_grad=0,
-) -> Dict[str, float]:
-    """
-    Note: log_step is used to check if model's sparsity found or not
-    """
-    model.train()
-    model.to(device)
-
-    loss_dict = dict(loss=0)
-    criterion = torch.nn.BCEWithLogitsLoss()
-    criterion = criterion.to(device)
-    for idx, batch in enumerate(dataloader):
-        inputs, labels = batch
-
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        outputs = model(inputs)
-
-        loss = criterion(outputs, labels.float())
-        optimizer.zero_grad()
-        loss.backward()
-        if clip_grad:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        optimizer.step()
-
-        loss_dict["loss"] += loss.item()
-
-        # Logging
-        if log_step and idx % log_step == 0:
-            msg = f"Idx: {idx}"
-
-            with torch.no_grad():
-                sparsity, n_params = model.embedding.get_sparsity(True)
-            msg += f" - params: {n_params} - sparsity: {sparsity:.2}"
-            for metric, value in loss_dict.items():
-                if value > 0:
-                    avg = value / (idx + 1)
-                    msg += f" - {metric}: {avg:.4}"
-            # if n_params <= TARGET_SPARSITY:
-            #     path = os.path.join(
-            #         model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
-            #     )
-            #     loguru.logger.info(f"Saved {TARGET_SPARSITY}")
-            #     if not os.path.exists(path):
-            #         torch.save(model.embedding.state_dict(), path)
-
-            loguru.logger.info(msg)
-            model.embedding.train_callback()
-
-        if profiler:
-            profiler.step()
-
-    for metric, value in loss_dict.items():
-        avg = value / (idx + 1)
-        loss_dict[metric] = avg
-
-    return loss_dict
 
 
 def get_config(argv: Optional[Sequence[str]] = None) -> Dict:
@@ -213,14 +145,21 @@ def main(argv: Optional[Sequence[str]] = None):
 
         config["num_epochs"] = 1
 
-    is_pep = model_config["embedding_config"]["name"] == "pep"
     best_auc = 0
     num_epochs = config["num_epochs"]
     clip_grad = 100
+
+    cerp_config = config.get("cerp", {"gamma_init": 1.0, "gamma_decay": 0.5})
+    gamma_init = cerp_config["gamma_init"]
+    gamma_decay = cerp_config["gamma_decay"]
+    target_sparsity = cerp_config["target_sparsity"]
+    trial_checkpoint = cerp_config["trial_checkpoint"]
+
+    save_model_checkpoint(model, trial_checkpoint, "initial")
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
-            train_metrics = train_epoch(
+            train_metrics = train_epoch_cerp(
                 train_dataloader,
                 model,
                 optimizer,
@@ -228,6 +167,8 @@ def main(argv: Optional[Sequence[str]] = None):
                 config["log_step"],
                 train_prof,
                 clip_grad,
+                target_sparsity=target_sparsity,
+                prune_loss_weight=gamma_init * (gamma_decay**epoch_idx),
             )
 
             train_metrics.update(metrics.get_env_metrics())
@@ -257,16 +198,10 @@ def main(argv: Optional[Sequence[str]] = None):
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
 
-                if is_pep:
-                    sparsity, n_params = model.embedding.get_sparsity(True)
-                    logger.log_metric("sparsity", sparsity, epoch_idx)
-                    logger.info(f"{n_params=}")
-                    path = os.path.join(
-                        model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
-                    )
-                    if n_params <= TARGET_SPARSITY and not os.path.exists(path):
-                        logger.info(f"save {TARGET_SPARSITY}")
-                        torch.save(model.embedding.state_dict(), path)
+            if train_metrics["sparsity"] >= target_sparsity:
+                logger.info("Found target sparsity")
+                save_model_checkpoint(model, trial_checkpoint)
+                break
 
     except KeyboardInterrupt:
         pass
