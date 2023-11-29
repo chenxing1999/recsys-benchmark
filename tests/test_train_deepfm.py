@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.dataset.criteo import CriteoDataset
-from src.models.deepfm import DeepFM
+from src.models.deepfm import DeepFM, get_optimizers
 from src.trainer.deepfm import train_epoch, validate_epoch
 
 CUR_DIR = os.path.dirname(__file__)
@@ -35,6 +35,34 @@ def test_train_simple(dataset, model):
 
     optimizer = torch.optim.Adam(model.parameters())
     loss_dict = train_epoch(loader, model, optimizer, device)
+    assert loss_dict["loss"] > 0
+    assert isinstance(loss_dict["loss"], float)
+
+
+def test_train_sparse(dataset):
+    loader = DataLoader(dataset, batch_size=24, num_workers=2)
+    model = DeepFM(
+        dataset.field_dims,
+        12,
+        [8, 12],
+        embedding_config={"name": "vanilla", "sparse": True},
+    )
+
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    config = {
+        "sparse": True,
+        "name": "adam",
+        "weight_decay": 1e-6,
+        "learning_rate": 1e-3,
+    }
+    optimizers = get_optimizers(model, config)
+
+    assert isinstance(optimizers, list) and len(optimizers) == 2
+    loss_dict = train_epoch(loader, model, optimizers, device)
     assert loss_dict["loss"] > 0
     assert isinstance(loss_dict["loss"], float)
 
