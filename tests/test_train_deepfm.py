@@ -39,7 +39,8 @@ def test_train_simple(dataset, model):
     assert isinstance(loss_dict["loss"], float)
 
 
-def test_train_sparse(dataset):
+@pytest.mark.parametrize("optimizer_name", ["sgd", "adam"])
+def test_train_sparse(dataset, optimizer_name):
     loader = DataLoader(dataset, batch_size=24, num_workers=2)
     model = DeepFM(
         dataset.field_dims,
@@ -61,10 +62,24 @@ def test_train_sparse(dataset):
     }
     optimizers = get_optimizers(model, config)
 
-    assert isinstance(optimizers, list) and len(optimizers) == 2
+    if optimizer_name == "adam":
+        assert isinstance(optimizers, list) and len(optimizers) == 2
     loss_dict = train_epoch(loader, model, optimizers, device)
     assert loss_dict["loss"] > 0
     assert isinstance(loss_dict["loss"], float)
+
+
+@pytest.mark.parametrize("name", ["sgd", "adam"])
+@pytest.mark.parametrize("sparse", [True, False])
+def test_get_optimizers(name, sparse, model):
+    config = {
+        "sparse": sparse,
+        "name": name,
+        "weight_decay": 1e-6,
+        "learning_rate": 1e-3,
+    }
+    optimizers = get_optimizers(model, config)
+    assert isinstance(optimizers, list)
 
 
 def test_eval_simple(dataset, model):
