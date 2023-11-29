@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset.criteo import get_dataset_cls
 from src.loggers import Logger
-from src.models.deepfm import DeepFM
+from src.models.deepfm import DeepFM, get_optimizers
 from src.trainer.deepfm import train_epoch, validate_epoch
 from src.utils import set_seed
 
@@ -133,11 +133,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
         return
 
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config["learning_rate"],
-        weight_decay=config["weight_decay"],
-    )
+    optimizers = get_optimizers(model, config)
 
     num_params = 0
     for p in model.parameters():
@@ -166,7 +162,7 @@ def main(argv: Optional[Sequence[str]] = None):
             train_metrics = train_epoch(
                 train_dataloader,
                 model,
-                optimizer,
+                optimizers,
                 device,
                 config["log_step"],
                 train_prof,

@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict
+from typing import Dict, List, Union
 
 import loguru
 import torch
@@ -14,12 +14,15 @@ now = datetime.datetime.now
 def train_epoch(
     dataloader: DataLoader,
     model: DeepFM,
-    optimizer,
+    optimizers: Union[List[torch.optim.Optimizer], torch.optim.Optimizer],
     device="cuda",
     log_step=10,
     profiler=None,
     clip_grad=0,
 ) -> Dict[str, float]:
+    if not isinstance(optimizers, list):
+        optimizers = [optimizers]
+
     model.train()
     model.to(device)
 
@@ -43,11 +46,15 @@ def train_epoch(
         outputs = model(inputs)
 
         loss = criterion(outputs, labels.float())
-        optimizer.zero_grad()
+        for optimizer in optimizers:
+            optimizer.zero_grad()
+
         loss.backward()
         if clip_grad:
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        optimizer.step()
+
+        for optimizer in optimizers:
+            optimizer.step()
 
         loss_dict["loss"] += loss.item()
 

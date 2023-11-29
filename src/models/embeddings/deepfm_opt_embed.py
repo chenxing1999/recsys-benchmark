@@ -538,15 +538,20 @@ def evol_search_deepfm(
     cur_top_values = None
     cur_top_candidate = []
 
+    if torch.cuda.is_available():
+        model = model.cuda()
+
     assert isinstance(model.embedding, IOptEmbed)
     hidden_size = model.embedding._hidden_size
 
     with torch.no_grad():
         sub_mask = model.embedding.get_submask()
 
-    cur_ele_percent = sub_mask.sum() / model.embedding._num_item
+    d_target_sparsity = None
+    if target_sparsity is not None:
+        cur_ele_percent = sub_mask.sum() / model.embedding._num_item
+        d_target_sparsity = 1 - (1 - target_sparsity) / cur_ele_percent
 
-    d_target_sparsity = 1 - (1 - target_sparsity) / cur_ele_percent
     logger.debug(f"{d_target_sparsity=}")
     candidates = [
         _generate_candidate(

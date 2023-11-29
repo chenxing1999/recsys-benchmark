@@ -161,6 +161,7 @@ class RetrainPepEmbedding(IEmbedding):
         sparsity: Union[float, str] = 0.8,
         ori_weight_dir: Optional[str] = None,
         field_name: str = "",
+        sparse=False,
     ):
         """
         Args:
@@ -207,6 +208,8 @@ class RetrainPepEmbedding(IEmbedding):
         self.sparsity = 1 - (nnz / torch.prod(torch.tensor(self.mask.size()))).item()
         self._mode = mode
 
+        self._sparse = sparse
+
     def get_weight(self):
         sparse_emb = self.emb.weight * self.mask
         return sparse_emb
@@ -214,9 +217,9 @@ class RetrainPepEmbedding(IEmbedding):
     def forward(self, x):
         sparse_emb = self.emb.weight * self.mask
         if self._mode:
-            xv = F.embedding_bag(x, sparse_emb, mode=self._mode)
+            xv = F.embedding_bag(x, sparse_emb, mode=self._mode, sparse=self._sparse)
         else:
-            xv = F.embedding(x, sparse_emb)
+            xv = F.embedding(x, sparse_emb, sparse=self._sparse)
         return xv
 
     def get_sparsity(self, get_n_params=False):

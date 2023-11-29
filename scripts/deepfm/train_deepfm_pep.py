@@ -64,13 +64,6 @@ def train_epoch(
                 if value > 0:
                     avg = value / (idx + 1)
                     msg += f" - {metric}: {avg:.4}"
-            # if n_params <= TARGET_SPARSITY:
-            #     path = os.path.join(
-            #         model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
-            #     )
-            #     loguru.logger.info(f"Saved {TARGET_SPARSITY}")
-            #     if not os.path.exists(path):
-            #         torch.save(model.embedding.state_dict(), path)
 
             loguru.logger.info(msg)
             model.embedding.train_callback()
