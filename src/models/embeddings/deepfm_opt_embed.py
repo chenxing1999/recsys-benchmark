@@ -538,6 +538,9 @@ def evol_search_deepfm(
     cur_top_values = None
     cur_top_candidate = []
 
+    if torch.cuda.is_available():
+        model = model.cuda()
+
     assert isinstance(model.embedding, IOptEmbed)
     hidden_size = model.embedding._hidden_size
 
