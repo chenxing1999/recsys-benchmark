@@ -1,6 +1,8 @@
 from typing import List, Optional, Union
 
 import torch
+import torch_sparse
+from torch.nn import functional as F
 
 from .base import IEmbedding
 
@@ -24,7 +26,13 @@ class PrunedEmbedding(IEmbedding):
         self._hidden_size = hidden_size
         num_item = sum(field_dims)
         weight = torch.empty((hidden_size, num_item))
-        self.register_buffer("_weight", weight)
+        self.LOGIC = 3
+        if self.LOGIC == 1:
+            self.register_buffer("_weight", weight)
+        elif self.LOGIC == 2:
+            self._weight = None
+        else:
+            self.register_buffer("_weight", weight)
 
     @classmethod
     @torch.no_grad()
@@ -36,17 +44,33 @@ class PrunedEmbedding(IEmbedding):
 
         # weight.T --> crow_indices = num_item, col_inidices the same
         # --> weight.T make O(1) compare O(num_item)
-        result._weight = weight.T.to_sparse_csr()
+        if result.LOGIC == 1:
+            result._weight = weight.T.to_sparse_csr()
+        elif result.LOGIC == 2:
+            result._weight = torch_sparse.SparseTensor.from_torch_sparse_csr_tensor(
+                weight.T.to_sparse_csr()
+            )
+        else:
+            result._weight = weight
+
         return result
 
     def get_weight(self):
         return self._weight.T
 
+    # @torch.compile
     def forward(self, x):
         original_shape = x.shape
-        result = torch.index_select(self._weight.to_sparse_coo(), 0, x.flatten())
-        result = result.to_dense()
-        return result.reshape(*original_shape, self._hidden_size)
+
+        if self.LOGIC == 1:
+            result = self._weight.to_sparse_coo().index_select(1, x.flatten())
+            result = result.to_dense()
+            return result.reshape(*original_shape, self._hidden_size)
+        elif self.LOGIC == 2:
+            result = torch_sparse.index_select(self._weight, 1, x.flatten())
+            return result.to_dense().reshape(*original_shape, self._hidden_size)
+        else:
+            return F.embedding(x, self._weight)
 
 
 if __name__ == "__main__":

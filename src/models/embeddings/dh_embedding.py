@@ -89,6 +89,7 @@ class DHEmbedding(IEmbedding):
         self._cache: Union[List[None], torch.Tensor] = [None] * self._num_item
         self._use_cache = cached
         self._use_bn = use_bn
+        self._out_size = out_size
 
         self._mode = mode
         logger.debug(f"Num params: {self.get_num_params()}")
@@ -169,8 +170,22 @@ class DHEmbedding(IEmbedding):
             else:
                 embs = F.embedding_bag(inp, cache, mode=mode)
         else:
-            vecs = [self._get_hash(item) for item in inp]
-            embs = torch.tensor(vecs, device=device)
+            # init emb
+            uniques, inverse_idx = inp.unique(return_inverse=True)
+            uniques = uniques.tolist()
+
+            # embs = torch.tensor(vecs, device=device)
+            if not self.training:
+                feats: torch.Tensor = torch.stack([self._get_hash(v) for v in uniques])
+                feats = feats.to(device)
+                feats = self._seq(feats)
+                # tmp_emb_size = max(inverse_idx) + 1
+
+                # tmp_emb = torch.zeros((tmp_emb_size, self._out_size), device=device)
+                # tmp_emb[inverse_idx] = feats
+                return F.embedding(inverse_idx, feats)
+            else:
+                raise NotImplementedError()
 
             # Not implement inplace operation like torch.Bag
             if mode is None:
@@ -184,6 +199,9 @@ class DHEmbedding(IEmbedding):
             else:
                 raise NotImplementedError()
 
+        return self._forward_mlp(embs)
+
+    def _forward_mlp(self, embs):
         is_flatten = False
         if len(embs.shape) == 3:
             is_flatten = True
