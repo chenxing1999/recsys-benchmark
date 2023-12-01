@@ -1,7 +1,9 @@
 from typing import List, Optional, Union
 
+import numba
 import torch
 import torch_sparse
+from numba import cuda
 from torch.nn import functional as F
 
 from .base import IEmbedding
@@ -26,7 +28,7 @@ class PrunedEmbedding(IEmbedding):
         self._hidden_size = hidden_size
         num_item = sum(field_dims)
         weight = torch.empty((hidden_size, num_item))
-        self.LOGIC = 3
+        self.LOGIC = 4
         if self.LOGIC == 1:
             self.register_buffer("_weight", weight)
         elif self.LOGIC == 2:
@@ -50,8 +52,20 @@ class PrunedEmbedding(IEmbedding):
             result._weight = torch_sparse.SparseTensor.from_torch_sparse_csr_tensor(
                 weight.T.to_sparse_csr()
             )
-        else:
+        elif result.LOGIC == 3:
             result._weight = weight
+        elif result.LOGIC == 4:
+            weight = weight.to_sparse_csr()
+            values = weight.values()
+
+            values = weight.values()
+            result.values = numba.cuda.as_cuda_array(values, sync=False)
+
+            crow_indices = weight.crow_indices()
+            result.crow_indices = numba.cuda.as_cuda_array(crow_indices, sync=False)
+
+            col_indices = weight.col_indices()
+            result.col_indices = numba.cuda.as_cuda_array(col_indices, sync=True)
 
         return result
 
@@ -69,8 +83,69 @@ class PrunedEmbedding(IEmbedding):
         elif self.LOGIC == 2:
             result = torch_sparse.index_select(self._weight, 1, x.flatten())
             return result.to_dense().reshape(*original_shape, self._hidden_size)
-        else:
+        elif self.LOGIC == 3:
             return F.embedding(x, self._weight)
+        elif self.LOGIC == 4:
+            x = x.flatten()
+            tensor_size = x.shape[0]
+            x = numba.cuda.as_cuda_array(x)
+            hidden_size = self._hidden_size
+
+            n_threads = 32
+            n_blocks = (tensor_size - 1) // 32 + 1
+            results = numba.cuda.device_array((tensor_size, hidden_size))
+
+            csr_embedding_lookup[n_blocks, n_threads](
+                self.values,
+                self.crow_indices,
+                self.col_indices,
+                x,
+                results,
+                tensor_size,
+                hidden_size,
+            )
+            result = torch.as_tensor(result, device="cuda")
+            return result.reshape(*original_shape, self._hidden_size)
+
+
+@cuda.jit
+def csr_embedding_lookup(
+    values,
+    crow_indices,
+    col_indices,
+    ids,
+    outputs,
+    size,
+    dim,
+):
+    """
+    Get value from
+
+    Args:
+        values
+        crow_indices
+        col_indices
+        ids: Index to select from
+        outputs: to store output
+            shape: N x D
+
+        size: ids size
+        dim: Size of final dimension of outputs
+    """
+    index = cuda.grid(1)
+
+    if index >= size:
+        return
+
+    rowid = ids[index]
+    left = crow_indices[rowid]
+    right = crow_indices[rowid + 1]
+
+    for i in range(dim):
+        outputs[index][i] = 0
+
+    for i in range(left, right):
+        outputs[index][col_indices[i]] = values[i]
 
 
 if __name__ == "__main__":
