@@ -362,3 +362,24 @@ def test_pruned_emb_cpu():
 
     assert results.isclose(expected).all()
     assert pruned_embedding.get_weight().isclose(weight).all()
+
+
+def test_dhe_without_cache_inference():
+    ORIGINAL_DHE_COUNTER = DHEmbedding.COUNTER
+    emb_with_cache = DHEmbedding(1024, 16, hidden_sizes=[32, 32])
+    emb_with_cache.eval()
+
+    # Reset counter to create same embedding cache
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
+    emb_without_cache = DHEmbedding(1024, 16, hidden_sizes=[32, 32], cached=False)
+    emb_without_cache.eval()
+
+    # Reset counter to reset state change
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
+
+    emb_without_cache._seq.load_state_dict(emb_with_cache._seq.state_dict())
+
+    inp = torch.randint(1024, size=(32,))
+
+    with torch.no_grad():
+        assert emb_with_cache(inp).isclose(emb_without_cache(inp)).all()
