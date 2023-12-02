@@ -1,10 +1,9 @@
 from typing import List, Optional, Union
 
 import numba
+import numpy as np
 import torch
-import torch_sparse
 from numba import cuda
-from torch.nn import functional as F
 
 from .base import IEmbedding
 
@@ -27,14 +26,8 @@ class PrunedEmbedding(IEmbedding):
 
         self._hidden_size = hidden_size
         num_item = sum(field_dims)
-        weight = torch.empty((hidden_size, num_item))
-        self.LOGIC = 4
-        if self.LOGIC == 1:
-            self.register_buffer("_weight", weight)
-        elif self.LOGIC == 2:
-            self._weight = None
-        else:
-            self.register_buffer("_weight", weight)
+        self.is_cuda = False
+        self._num_item = num_item
 
     @classmethod
     @torch.no_grad()
@@ -44,48 +37,58 @@ class PrunedEmbedding(IEmbedding):
 
         result = cls(num_item, hidden_size, mode)
 
-        # weight.T --> crow_indices = num_item, col_inidices the same
-        # --> weight.T make O(1) compare O(num_item)
-        if result.LOGIC == 1:
-            result._weight = weight.T.to_sparse_csr()
-        elif result.LOGIC == 2:
-            result._weight = torch_sparse.SparseTensor.from_torch_sparse_csr_tensor(
-                weight.T.to_sparse_csr()
-            )
-        elif result.LOGIC == 3:
-            result._weight = weight
-        elif result.LOGIC == 4:
-            weight = weight.to_sparse_csr()
-            values = weight.values()
+        weight = weight.to_sparse_csr()
+        result.values = weight.values().numpy()
 
-            values = weight.values()
-            result.values = numba.cuda.as_cuda_array(values, sync=False)
+        crow_indices = weight.crow_indices()
+        result.crow_indices = crow_indices.numpy()
 
-            crow_indices = weight.crow_indices()
-            result.crow_indices = numba.cuda.as_cuda_array(crow_indices, sync=False)
-
-            col_indices = weight.col_indices()
-            result.col_indices = numba.cuda.as_cuda_array(col_indices, sync=True)
+        col_indices = weight.col_indices()
+        result.col_indices = col_indices.numpy()
 
         return result
 
-    def get_weight(self):
-        return self._weight.T
+    def to_cuda(self):
+        """Convert Pruned Embedding from CPU to CUDA"""
+        if self.is_cuda:
+            return
 
-    # @torch.compile
+        # self.values = numba.cuda.to_device(self.values)
+        # self.crow_indices = numba.cuda.to_device(self.crow_indices)
+        # self.col_indices = numba.cuda.to_device(self.col_indices)
+
+        # simply convert numpy array to numba will make PyTorch API cannot
+        # keep track GPU memory usage of Numba
+        self.values = self._to_cuda(self.values)
+        self.crow_indices = self._to_cuda(self.crow_indices)
+        self.col_indices = self._to_cuda(self.col_indices, sync=True)
+        self.is_cuda = True
+
+    @staticmethod
+    def _to_cuda(np_arr: np.ndarray, sync=False):
+        return numba.cuda.as_cuda_array(torch.from_numpy(np_arr).to("cuda"), sync=sync)
+
+    def get_weight(self):
+        sparse_csr = torch.sparse_csr_tensor(
+            self._to_torch(self.crow_indices),
+            self._to_torch(self.col_indices),
+            self._to_torch(self.values),
+            size=(self._num_item, self._hidden_size),
+            dtype=torch.float32,
+        )
+        return sparse_csr.to_dense()
+
+    def _to_torch(self, x) -> torch.Tensor:
+        """Convert x into torch.Tensor"""
+        if self.is_cuda:
+            return torch.as_tensor(x)
+        else:
+            return torch.from_numpy(x)
+
     def forward(self, x):
         original_shape = x.shape
 
-        if self.LOGIC == 1:
-            result = self._weight.to_sparse_coo().index_select(1, x.flatten())
-            result = result.to_dense()
-            return result.reshape(*original_shape, self._hidden_size)
-        elif self.LOGIC == 2:
-            result = torch_sparse.index_select(self._weight, 1, x.flatten())
-            return result.to_dense().reshape(*original_shape, self._hidden_size)
-        elif self.LOGIC == 3:
-            return F.embedding(x, self._weight)
-        elif self.LOGIC == 4:
+        if self.is_cuda:
             x = x.flatten()
             tensor_size = x.shape[0]
             x = numba.cuda.as_cuda_array(x)
@@ -93,7 +96,10 @@ class PrunedEmbedding(IEmbedding):
 
             n_threads = 32
             n_blocks = (tensor_size - 1) // 32 + 1
-            results = numba.cuda.device_array((tensor_size, hidden_size))
+            results = torch.zeros(
+                (tensor_size, hidden_size), dtype=torch.float32, device="cuda"
+            )
+            results = numba.cuda.as_cuda_array(results)
 
             csr_embedding_lookup[n_blocks, n_threads](
                 self.values,
@@ -104,8 +110,26 @@ class PrunedEmbedding(IEmbedding):
                 tensor_size,
                 hidden_size,
             )
-            result = torch.as_tensor(result, device="cuda")
-            return result.reshape(*original_shape, self._hidden_size)
+            results = torch.as_tensor(results, device="cuda")
+            return results.reshape(*original_shape, self._hidden_size)
+        else:
+            x = x.flatten().numpy()
+            tensor_size = x.shape[0]
+            hidden_size = self._hidden_size
+
+            results = np.empty((tensor_size, hidden_size), dtype=np.float32)
+
+            csr_embedding_lookup_cpu(
+                self.values,
+                self.crow_indices,
+                self.col_indices,
+                x,
+                results,
+                tensor_size,
+                hidden_size,
+            )
+            results = torch.as_tensor(results)
+            return results.reshape(*original_shape, self._hidden_size)
 
 
 @cuda.jit
@@ -116,7 +140,7 @@ def csr_embedding_lookup(
     ids,
     outputs,
     size,
-    dim,
+    hidden_size,
 ):
     """
     Get value from
@@ -130,7 +154,7 @@ def csr_embedding_lookup(
             shape: N x D
 
         size: ids size
-        dim: Size of final dimension of outputs
+        hidden_size: Size of final dimension of outputs
     """
     index = cuda.grid(1)
 
@@ -141,11 +165,31 @@ def csr_embedding_lookup(
     left = crow_indices[rowid]
     right = crow_indices[rowid + 1]
 
-    for i in range(dim):
+    for i in range(hidden_size):
         outputs[index][i] = 0
 
     for i in range(left, right):
         outputs[index][col_indices[i]] = values[i]
+
+
+@numba.jit(nopython=True)
+def csr_embedding_lookup_cpu(
+    values,
+    crow_indices,
+    col_indices,
+    ids,
+    outputs,
+    size,
+    hidden_size,
+):
+    left = crow_indices[ids]
+    right = crow_indices[ids + 1]
+
+    outputs[:] = 0
+
+    for index in range(size):
+        for i in range(left[index], right[index]):
+            outputs[index][col_indices[i]] = values[i]
 
 
 if __name__ == "__main__":

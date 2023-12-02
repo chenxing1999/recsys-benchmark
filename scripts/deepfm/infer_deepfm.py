@@ -199,8 +199,8 @@ def main(argv: Optional[Sequence[str]] = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model.to(device)
-    if isinstance(model.embedding, PrunedEmbedding):
-        model.embedding._weight = model.embedding._weight.to("cuda")
+    if isinstance(model.embedding, PrunedEmbedding) and device == "cuda":
+        model.embedding.to_cuda()
 
     print("--- Load model ---")
     if torch.cuda.is_available():
