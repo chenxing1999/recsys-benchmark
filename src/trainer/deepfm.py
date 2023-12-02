@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Tuple, Union
 
 import loguru
 import torch

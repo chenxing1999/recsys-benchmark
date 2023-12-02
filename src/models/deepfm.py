@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 import torch
 from loguru import logger

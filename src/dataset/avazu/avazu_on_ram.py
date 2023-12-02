@@ -233,5 +233,3 @@ if __name__ == "__main__":
     binary = _create_binary(txt_path)
     print("Total data", sum(len(binary[k]) for k in ["train", "val", "test"]))
     torch.save(binary, line_info)
-
-    # dataset = AvazuOnRam(txt_path, line_info, "test", "dataset/ctr/avazu/ram_cache.bin")
