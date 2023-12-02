@@ -127,3 +127,6 @@ class CriteoIterDataset(IterableDataset[Tuple[torch.Tensor, float]], ICTRDataset
     def describe(self):
         logger.info("Iter Criteo Dataset")
         logger.info("Num data:", self.num_data)
+
+    def __getitem__(self, idx):
+        raise NotImplementedError("This is iterable dataset. Please use iter mode")
