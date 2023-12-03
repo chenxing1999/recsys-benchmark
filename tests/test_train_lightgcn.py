@@ -54,6 +54,27 @@ def test_train_simple(train_dataset, model):
         assert isinstance(loss, float)
 
 
+def test_train_no_info_nce_no_decay(train_dataset, model):
+    loader = DataLoader(train_dataset, batch_size=24, num_workers=2)
+
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    optimizer = torch.optim.Adam(model.parameters())
+    loss_dict = train_epoch(
+        loader,
+        model,
+        optimizer,
+        device,
+        weight_decay=0.0,
+        info_nce_weight=0.0,
+    )
+
+    assert abs(loss_dict["rec_loss"] - loss_dict["loss"]) < 1e-8
+
+
 def test_val_simple(train_dataset, val_dataset, model):
     loader = DataLoader(
         val_dataset,

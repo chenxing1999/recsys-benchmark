@@ -5,9 +5,8 @@ from typing import DefaultDict, Dict, Final, List, Optional, Tuple
 
 import torch
 from loguru import logger
-from torch.utils.data import Dataset
 
-from .base import ICriteoDatset
+from ..base import ICTRDataset
 from .utils import NUM_FEATS, NUM_INT_FEATS, convert_numeric_feature, get_cache_data
 
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
@@ -15,7 +14,7 @@ FeatMapper = Dict[int, Dict[str, int]]
 
 
 # Construct feat mapper and default
-class CriteoDataset(Dataset, ICriteoDatset):
+class CriteoDataset(ICTRDataset):
     """
     Note: This implementation is based on pytorch-fm original implementation.
         The main difference is removing lmdb and changing reading logic.

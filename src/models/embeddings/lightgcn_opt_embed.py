@@ -19,8 +19,8 @@ class IOptEmbed(IEmbedding):
     def forward(self, x, mask_d=None):
         ...
 
-    def get_l_s(self):
-        return 0
+    def get_l_s(self) -> torch.Tensor:
+        return torch.tensor(0)
 
 
 class OptEmbed(IOptEmbed):
@@ -116,9 +116,9 @@ class OptEmbed(IOptEmbed):
         self._method = 1
         self._mode_d = mode_threshold_d
 
-    def get_l_s(self):
+    def get_l_s(self) -> torch.Tensor:
         if self._t_init is None:
-            return 0
+            return torch.tensor(0)
         return torch.exp(-self._mask_e_module._t_param).sum()
 
     def get_weight(self, mask_d: Optional[torch.Tensor] = None):

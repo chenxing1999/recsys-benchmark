@@ -163,3 +163,4 @@ cython_debug/
 .criterio
 logs/
 checkpoints/
+*.sqlite3

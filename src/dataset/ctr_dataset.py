@@ -3,10 +3,11 @@
 from collections import defaultdict
 
 import numpy as np
-from torch.utils.data import Dataset
+
+from .base import ICTRDataset
 
 
-class CTRDataset(Dataset):
+class CTRDataset(ICTRDataset):
     field_dims: np.ndarray
 
     def __init__(
@@ -79,4 +80,4 @@ class CTRDataset(Dataset):
                 for i, v in enumerate(self.data[idx]["x"])
             ]
         )
-        return feat + self.offsets, self.data[idx]["y"]
+        return feat, self.data[idx]["y"]

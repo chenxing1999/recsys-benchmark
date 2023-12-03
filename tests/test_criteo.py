@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+from src.dataset import get_ctr_dataset
 from src.dataset.criteo import CriteoDataset, CriteoIterDataset
 from src.dataset.criteo.utils import NUM_FEATS
 
@@ -43,3 +44,21 @@ def test_criteo_iter_dataset_init():
 
         for field_dim, feat in zip(dataset.field_dims, feature):
             assert feat < field_dim
+
+
+def test_get_criteo_simple():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cache_path = os.path.join(tmp_dir, "cache.bin")
+        dataloader_config = dict(
+            dataset=dict(
+                path=SAMPLE_DATASET,
+                cache_path=cache_path,
+            ),
+            num_workers=2,
+            batch_size=4,
+        )
+
+        dataset = get_ctr_dataset(dataloader_config)
+        assert isinstance(dataset, CriteoDataset)
+        assert len(dataset) == 100
+        assert len(dataset.feat_mappers[5]) == 0

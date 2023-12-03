@@ -1,4 +1,5 @@
-from typing import List, Optional, Union
+from abc import abstractmethod
+from typing import Iterable, Optional, Union
 
 import torch
 from torch import nn
@@ -11,6 +12,7 @@ class IEmbedding(nn.Module):
     but usually get higher accuracy.
     """
 
+    @abstractmethod
     def get_weight(self) -> torch.Tensor:
         ...
 
@@ -25,7 +27,7 @@ class VanillaEmbedding(IEmbedding):
 
     def __init__(
         self,
-        field_dims: Union[List[int], int],
+        field_dims: Union[Iterable[int], int],
         hidden_size: int,
         mode: Optional[str] = None,
         initializer="xavier",

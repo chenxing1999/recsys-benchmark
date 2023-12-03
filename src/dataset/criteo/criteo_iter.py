@@ -1,20 +1,20 @@
 import os
 from collections import defaultdict
 from functools import partial
-from typing import DefaultDict, Dict, Optional
+from typing import DefaultDict, Dict, Optional, Tuple
 
 import torch
 from loguru import logger
 from torch.utils.data import IterableDataset
 
-from .base import ICriteoDatset
+from ..base import ICTRDataset
 from .utils import NUM_FEATS, NUM_INT_FEATS, convert_numeric_feature, get_cache_data
 
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
 FeatMapper = Dict[int, Dict[str, int]]
 
 
-class CriteoIterDataset(IterableDataset, ICriteoDatset):
+class CriteoIterDataset(IterableDataset[Tuple[torch.Tensor, float]], ICTRDataset):
     """
     Iterable version of src.dataset.criteo.criteo.CriteoDataset
 
@@ -127,3 +127,6 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
     def describe(self):
         logger.info("Iter Criteo Dataset")
         logger.info("Num data:", self.num_data)
+
+    def __getitem__(self, idx):
+        raise NotImplementedError("This is iterable dataset. Please use iter mode")
