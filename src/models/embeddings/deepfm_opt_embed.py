@@ -110,7 +110,7 @@ class OptEmbed(IOptEmbed):
         self._hidden_size = hidden_size
 
         self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
-        self._cur_weight = None
+        self.register_buffer("_cur_weight", torch.empty(0), persistent=False)
         nn.init.xavier_uniform_(self._weight)
 
         # When backward -> weight update
@@ -152,7 +152,7 @@ class OptEmbed(IOptEmbed):
         emb = self._mask_e_module(self._weight)
 
         if not self.training and mask_d is None:
-            self._cur_weight = emb
+            self._cur_weight.data = emb
             return self._cur_weight
 
         if self.training:
@@ -180,7 +180,7 @@ class OptEmbed(IOptEmbed):
             elif isinstance(mask_d, torch.LongTensor):
                 mask_d = F.embedding(mask_d, self._full_mask_d)
 
-            self._cur_weight = emb * mask_d
+            self._cur_weight.data = emb * mask_d
         else:
             if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
                 mask_d = mask_d.to(device)
@@ -195,7 +195,7 @@ class OptEmbed(IOptEmbed):
 
                 mask_d = F.embedding(mask_d, self._full_mask_d)
             mask_d = mask_d.to(self._weight)
-            self._cur_weight = emb * mask_d
+            self._cur_weight.data = emb * mask_d
 
         return self._cur_weight
 
@@ -232,7 +232,7 @@ class OptEmbed(IOptEmbed):
                 return emb.mean(1)
 
         # Evaluation forward logic
-        if self._cur_weight is None:
+        if nn.parameter.is_lazy(self._cur_weight):
             self.get_weight(mask_d)
 
         if self._mode is None:
@@ -250,6 +250,9 @@ class OptEmbed(IOptEmbed):
         return sparsity
 
     def get_num_params(self):
+        if not nn.parameter.is_lazy(self._cur_weight) and not self.training:
+            return torch.count_nonzero(self._cur_weight).item()
+
         emb = self._mask_e_module(self._weight)
         nnz = torch.nonzero(emb).size(0)
         nnz = int(nnz)

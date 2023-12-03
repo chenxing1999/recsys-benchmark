@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 from loguru import logger
@@ -101,14 +101,19 @@ class DeepFM(nn.Module):
 
         return scores
 
+    def get_ranks(self, x) -> torch.Tensor:
+        scores = self(x)
+        return torch.argsort(scores, descending=True)
+
     @classmethod
-    def load(cls, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    def load(cls, checkpoint: Union[str, Dict], strict=True) -> "DeepFM":
+        if isinstance(checkpoint, str):
+            checkpoint = torch.load(checkpoint, map_location="cpu")
         model_config = checkpoint["model_config"]
         field_dims = checkpoint["field_dims"]
 
         model = cls(field_dims, **model_config)
-        model.load_state_dict(checkpoint["state_dict"])
+        model.load_state_dict(checkpoint["state_dict"], strict=strict)
         return model
 
 

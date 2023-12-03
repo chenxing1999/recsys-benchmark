@@ -1,5 +1,6 @@
 import os
 import tempfile
+from typing import Tuple
 
 import pytest
 import torch
@@ -11,6 +12,40 @@ from src.models.embeddings import (
     get_embedding,
 )
 from src.models.embeddings.tensortrain_embeddings import TT_EMB_AVAILABLE
+
+numba_cuda_available = False
+numba_available = False
+try:
+    import numba  # noqa: F401
+
+    numba_available = True
+    numba_cuda_available = torch.cuda.is_available()
+except ImportError:
+    pass
+
+
+def create_sparse_tensor(
+    sparse_rate: float, size: Tuple[int, int], device="cuda"
+) -> torch.Tensor:
+    """Create random sparse tensor
+
+    Args:
+        sparse_rate
+        size
+    """
+    num_values = int(size[0] * size[1] * (1 - sparse_rate))
+    v = torch.ones(num_values, device=device)
+    ind = torch.stack(
+        [
+            torch.randint(size[0], size=(num_values,), device=device),
+            torch.randint(size[1], size=(num_values,), device=device),
+        ]
+    )
+    return torch.sparse_coo_tensor(
+        ind,
+        v,
+        size=size,
+    )
 
 
 @pytest.mark.parametrize(
@@ -282,3 +317,69 @@ def test_tt_emb_assertion_device_input():
 
     with pytest.raises(AssertionError):
         emb(inp)
+
+
+@pytest.mark.skipif(not numba_cuda_available, reason="Numba or CUDA is not available")
+def test_pruned_emb_cuda():
+    from src.models.embeddings.base import VanillaEmbedding
+    from src.models.embeddings.pruned_embedding import PrunedEmbedding
+
+    field_dims = [512, 512]
+    num_items = sum(field_dims)
+    model = VanillaEmbedding(field_dims, 16)
+    weight = create_sparse_tensor(0.9, (num_items, 16), "cpu").to_dense()
+    model._emb_module.weight.data = weight
+
+    pruned_embedding = PrunedEmbedding.from_other_emb(model)
+
+    model.cuda()
+    pruned_embedding.to_cuda()
+
+    inp = torch.randint(num_items, size=(256,), device="cuda")
+    results = pruned_embedding(inp)
+    expected = model(inp)
+
+    assert results.isclose(expected).all()
+    assert pruned_embedding.get_weight().isclose(weight).all()
+
+
+@pytest.mark.skipif(not numba_available, reason="Numba is not available")
+def test_pruned_emb_cpu():
+    from src.models.embeddings.base import VanillaEmbedding
+    from src.models.embeddings.pruned_embedding import PrunedEmbedding
+
+    field_dims = [512, 512]
+    num_items = sum(field_dims)
+    model = VanillaEmbedding(field_dims, 16)
+    weight = create_sparse_tensor(0.9, (num_items, 16), "cpu").to_dense()
+    model._emb_module.weight.data = weight
+
+    pruned_embedding = PrunedEmbedding.from_other_emb(model)
+
+    inp = torch.randint(num_items, size=(256,))
+    results = pruned_embedding(inp)
+    expected = model(inp)
+
+    assert results.isclose(expected).all()
+    assert pruned_embedding.get_weight().isclose(weight).all()
+
+
+def test_dhe_without_cache_inference():
+    ORIGINAL_DHE_COUNTER = DHEmbedding.COUNTER
+    emb_with_cache = DHEmbedding(1024, 16, hidden_sizes=[32, 32])
+    emb_with_cache.eval()
+
+    # Reset counter to create same embedding cache
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
+    emb_without_cache = DHEmbedding(1024, 16, hidden_sizes=[32, 32], cached=False)
+    emb_without_cache.eval()
+
+    # Reset counter to reset state change
+    DHEmbedding.COUNTER = ORIGINAL_DHE_COUNTER
+
+    emb_without_cache._seq.load_state_dict(emb_with_cache._seq.state_dict())
+
+    inp = torch.randint(1024, size=(32,))
+
+    with torch.no_grad():
+        assert emb_with_cache(inp).isclose(emb_without_cache(inp)).all()
