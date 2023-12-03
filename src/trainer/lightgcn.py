@@ -40,7 +40,7 @@ def train_epoch(
 
     num_sample = 0
 
-    loss_dict = dict(
+    loss_dict: Dict[str, float] = dict(
         loss=0,
         reg_loss=0,
         rec_loss=0,
@@ -60,13 +60,13 @@ def train_epoch(
 
         rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
 
-        reg_loss = 0
+        reg_loss: torch.Tensor = torch.tensor(0)
         if weight_decay > 0:
             reg_loss = model.get_reg_loss(users, pos_items, neg_items)
             loss_dict["reg_loss"] += reg_loss.item()
 
         # Enable SGL-Without Augmentation for faster converge
-        info_nce_loss = 0
+        info_nce_loss: torch.Tensor = torch.tensor(0)
         if info_nce_weight > 0:
             temperature = 0.2
 
@@ -149,7 +149,7 @@ def validate_epoch(
     # num_user + num_item, hidden_dim
     user_embs, item_embs = model(adj)
 
-    ndcg = 0
+    ndcg: float = 0
     all_y_pred = []
     all_y_true = []
 
@@ -218,7 +218,7 @@ def train_epoch_optembed(
     model.to(device)
     adj = adj.to(device)
 
-    loss_dict = dict(
+    loss_dict: Dict[str, float] = dict(
         loss=0,
         reg_loss=0,
         rec_loss=0,
@@ -239,13 +239,13 @@ def train_epoch_optembed(
 
         rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
 
-        reg_loss = 0
+        reg_loss = torch.tensor(0)
         if weight_decay > 0:
             reg_loss = model.get_reg_loss(users, pos_items, neg_items)
             loss_dict["reg_loss"] += reg_loss.item()
 
         # Enable SGL-Without Augmentation for faster converge
-        info_nce_loss = 0
+        info_nce_loss = torch.tensor(0)
         if info_nce_weight > 0:
             temperature = 0.2
 

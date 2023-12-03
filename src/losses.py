@@ -23,11 +23,11 @@ def bpr_loss(user_embs, pos_embs, neg_embs):
 
 
 def info_nce(
-    view1,
-    view2,
+    view1: torch.Tensor,
+    view2: torch.Tensor,
     temperature: float = 1,
     b_cos: bool = True,
-):
+) -> torch.Tensor:
     """
     Args:
         view1: (torch.Tensor - N x D)

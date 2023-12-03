@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import loguru
 import torch
@@ -10,9 +10,12 @@ from src.models.deepfm import DeepFM
 
 now = datetime.datetime.now
 
+# first is feat (without offset), second is label
+CTR_DATA = Tuple[torch.Tensor, float]
+
 
 def train_epoch(
-    dataloader: DataLoader,
+    dataloader: DataLoader[CTR_DATA],
     model: DeepFM,
     optimizers: Union[List[torch.optim.Optimizer], torch.optim.Optimizer],
     device="cuda",
@@ -90,7 +93,7 @@ def train_epoch(
 
 @torch.no_grad()
 def validate_epoch(
-    val_loader: DataLoader,
+    val_loader: DataLoader[CTR_DATA],
     model: DeepFM,
     device="cuda",
 ) -> Dict[str, float]:

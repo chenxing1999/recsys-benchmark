@@ -7,8 +7,10 @@ from torch.utils.data import Dataset
 
 from ..graph_utils import calculate_sparse_graph_adj_norm, get_adj
 
+Graph = Dict[int, List[int]]
 
-def load_graph_dataset(path: str) -> Tuple[dict, list, int, list]:
+
+def load_graph_dataset(path: str) -> Tuple[Graph, list, int, list]:
     """
 
     Returns:
@@ -17,11 +19,11 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, list]:
         users: (list[int])
         num_item: (int)
     """
-    graph = {}
+    graph: Graph = {}
     users = []
     num_item = 0
     num_interactions = 0
-    user_item_pairs = []
+    user_item_pairs: List[Tuple[int, int]] = []
     with open(path) as fin:
         for line in fin.readlines():
             info = line.strip().split()
@@ -45,7 +47,7 @@ def load_graph_dataset(path: str) -> Tuple[dict, list, int, list]:
     return graph, users, num_item + 1, user_item_pairs
 
 
-class CFGraphDataset(Dataset):
+class CFGraphDataset(Dataset[Tuple[int, int, Union[int, List[int]]]]):
     """LightGCN Graph CF Structure"""
 
     def __init__(
@@ -194,7 +196,7 @@ class CFGraphDataset(Dataset):
         return self._norm_adj
 
 
-class TestCFGraphDataset(Dataset):
+class TestCFGraphDataset(Dataset[Tuple[int, Set[int]]]):
     def __init__(self, path: str):
         """
         Args:

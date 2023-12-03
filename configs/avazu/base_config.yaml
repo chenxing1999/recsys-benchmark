@@ -1,0 +1,81 @@
+model:
+  num_factor: 16
+  hidden_sizes:
+    - 400
+    - 400
+    - 400
+  p_dropout: 0.5
+  embedding_config:
+    name: vanilla
+  use_batchnorm: True
+
+train_dataloader:
+  dataset:
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
+    dataset_name: train
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
+  num_workers: 8
+  batch_size: 2048
+
+val_dataloader:
+  dataset:
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
+    dataset_name: val
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
+  batch_size: 2048
+  num_workers: 8
+
+test_dataloader:
+  dataset:
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
+    dataset_name: test
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
+  batch_size: 2048
+  num_workers: 8
+
+run_test: false
+
+checkpoint_path: checkpoints/deepfm_checkpoint.pth
+num_epochs: 15
+log_step: 1000
+
+weight_decay: 0.000001
+learning_rate: 0.001
+validate_step: 1
+
+enable_profile: false
+
+profilers:
+  train_profiler:
+    log_path: logs/lightgcn/train
+    # Check pytorch document on profiler for more information
+    # https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html#use-profiler-to-record-execution-events
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: false
+  val_profiler:
+    log_path: logs/lightgcn/val
+    schedule:
+      wait: 1
+      warmup: 1
+      active: 3
+      repeat: 2
+    record_shapes: true
+    profile_memory: true
+    with_stack: true
+
+logger:
+  level: INFO
+  log_folder: logs/deepfm
+  log_name: original

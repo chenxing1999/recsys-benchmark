@@ -6,7 +6,7 @@ import yaml
 from loguru import logger
 from torch.utils.data import DataLoader
 
-from src.dataset.criteo import get_dataset_cls
+from src.dataset import get_ctr_dataset
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import validate_epoch
 from src.utils import prune
@@ -59,11 +59,7 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info("Load train dataset...")
 
     train_dataloader_config = config["train_dataloader"]
-    train_dataset_cls = get_dataset_cls(train_dataloader_config)
-    logger.info(f"Train dataset type: {train_dataset_cls}")
-
-    train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset = train_dataset_cls(**train_dataset_config)
+    train_dataset = get_ctr_dataset(train_dataloader_config)
 
     logger.info("Successfully load train dataset")
     train_dataset.describe()
@@ -76,14 +72,12 @@ def main(argv: Optional[Sequence[str]] = None):
         val_dataloader_config = config["val_dataloader"]
 
     logger.info("Load val dataset...")
-    val_dataset_config = val_dataloader_config["dataset"]
+    val_dataloader_config["dataset"]
 
     # TODO: Refactor later
-    val_dataset_cls = get_dataset_cls(val_dataloader_config)
-    logger.info(f"Val dataset type: {val_dataset_cls}")
     train_info_to_val = train_dataset.pop_info()
 
-    val_dataset = val_dataset_cls(**val_dataset_config, **train_info_to_val)
+    val_dataset = get_ctr_dataset(val_dataloader_config, train_info_to_val)
     val_dataset.pop_info()
 
     val_dataloader = DataLoader(

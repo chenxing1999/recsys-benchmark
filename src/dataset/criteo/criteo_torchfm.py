@@ -8,12 +8,14 @@ from pathlib import Path
 
 import lmdb
 import numpy as np
-import torch.utils.data
+import torch
 from loguru import logger
 from tqdm import tqdm
 
+from ..base import ICTRDataset
 
-class CriteoDataset(torch.utils.data.Dataset):
+
+class CriteoDataset(ICTRDataset):
     """
     Criteo Display Advertising Challenge Dataset
 
@@ -22,6 +24,10 @@ class CriteoDataset(torch.utils.data.Dataset):
             and treat them as a single feature
         * Discretize numerical values by log2 transformation which is
             proposed by the winner of Criteo Competition
+
+    :param train_test_info: Path to data contains train-val-test indices
+    :param dataset_name: Literal["train", "val", "test"]
+    :param my_path: Path to load feat mappers and defaults
 
     :param dataset_path: criteo train.txt path.
     :param cache_path: lmdb cache path.

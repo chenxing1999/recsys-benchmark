@@ -1,6 +1,7 @@
 import os
 from typing import Dict, List, Optional, Sequence, Union
 
+
 import torch
 from loguru import logger
 from torch import nn
@@ -13,7 +14,7 @@ class DeepFM(nn.Module):
 
     def __init__(
         self,
-        field_dims: Sequence[int],
+        field_dims: List[int],
         num_factor: int,
         hidden_sizes: List[int],
         p_dropout: float = 0.1,
@@ -49,7 +50,7 @@ class DeepFM(nn.Module):
 
         deep_branch_inp = num_factor * len(field_dims)
 
-        layers = []
+        layers: List[nn.Module] = []
         for size in hidden_sizes:
             layers.append(nn.Linear(deep_branch_inp, size))
             if use_batchnorm:
@@ -65,9 +66,11 @@ class DeepFM(nn.Module):
         # torch.set_float32_matmul_precision('high')
         # self._deep_branch = torch.compile(self._deep_branch)
 
-        field_dims = torch.tensor(field_dims)
-        field_dims = torch.cat([torch.tensor([0], dtype=torch.long), field_dims])
-        offsets = torch.cumsum(field_dims[:-1], 0).unsqueeze(0)
+        field_dims_tensor = torch.tensor(field_dims)
+        field_dims_tensor = torch.cat(
+            [torch.tensor([0], dtype=torch.long), field_dims_tensor]
+        )
+        offsets = torch.cumsum(field_dims_tensor[:-1], 0).unsqueeze(0)
         self.register_buffer("offsets", offsets)
 
     # @torch.compile(fullgraph=True)
