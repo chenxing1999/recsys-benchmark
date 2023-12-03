@@ -26,7 +26,7 @@ class DHEmbedding(IEmbedding):
         mode: Optional[str] = None,
         inp_size: int = 1024,
         hidden_sizes: Optional[List[int]] = None,
-        use_bn: bool = True,
+        use_bn: Union[bool, int] = True,
         cached: bool = True,
         prime_file: Optional[str] = None,
         cache_path: str = "",
@@ -39,6 +39,7 @@ class DHEmbedding(IEmbedding):
             inp_size: Input size / `k` in the paper
             hidden_sizes: List[int] for hidden size of each table
             use_bn: Use batchnorm or not
+                use_bn == 2 to use Linear -> Mish -> BatchNorm
             cached: Will store all hash vector in memory or run online
 
             prime_file: Contains list of possible value for p
@@ -55,6 +56,9 @@ class DHEmbedding(IEmbedding):
 
         if isinstance(field_dims, int):
             field_dims = [field_dims]
+
+        if isinstance(use_bn, bool):
+            use_bn = int(use_bn)
 
         num_item = sum(field_dims)
         self.m = int(1e6)
@@ -79,9 +83,14 @@ class DHEmbedding(IEmbedding):
         hidden_sizes.append(out_size)
         for size in hidden_sizes:
             layers.append(nn.Linear(inp_size, size))
-            layers.append(nn.Mish())
-            if use_bn:
+            if use_bn == 2:
+                layers.append(nn.Mish())
                 layers.append(nn.BatchNorm1d(size))
+            elif use_bn == 1:
+                layers.append(nn.BatchNorm1d(size))
+                layers.append(nn.Mish())
+            else:
+                layers.append(nn.Mish())
 
             inp_size = size
 
