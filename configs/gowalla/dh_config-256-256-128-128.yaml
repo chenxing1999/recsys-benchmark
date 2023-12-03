@@ -6,6 +6,7 @@ model:
   embedding_config:
     name: dhe
     hidden_sizes: [256, 256, 128, 128]
+    use_bn: 1
 
 train_dataloader:
   dataset:
