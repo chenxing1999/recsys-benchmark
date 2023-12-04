@@ -84,4 +84,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/cerp
-  log_name: original
+  log_name: retrain-80
