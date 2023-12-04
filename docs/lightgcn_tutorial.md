@@ -26,7 +26,11 @@ python scripts/lightgcn/train_lightgcn.py configs/yelp2018/pep_retrain.yaml
 python scripts/lightgcn/train_lightgcn.py configs/yelp2018/opt-embed.yaml
 ```
 
-- Use mask E with mask D: TBD
+- Use mask E with mask D:
+
+```shell
+python scripts/lightgcn/train_lightgcn_optembed.py configs/yelp2018/opt-embed-full.yaml
+```
 
 2. Run evolutionary
 
@@ -50,4 +54,14 @@ python scripts/lightgcn/train_lightgcn.py configs/yelp2018/opt-embed-retrain.yam
 
 # CERP
 
-TBD
+- Run find mask
+
+```shell
+python scripts/lightgcn/train_lightgcn_cerp.py --n-trials 0 -l logs/cerp-80 configs/yelp2018/cerp_config-80.yaml
+```
+
+- Run retrain mask
+
+```shell
+python scripts/lightgcn/train_lightgcn.py configs/yelp2018/cerp_config-retrain-80.yaml
+```
