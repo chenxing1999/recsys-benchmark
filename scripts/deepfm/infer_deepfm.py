@@ -141,6 +141,7 @@ def _load_ttrec(checkpoint_path: str, cache=False):
 def _load_opt_mask_d(
     checkpoint_path: str,
     initial_path: str,
+    mem_optimized=False,
 ) -> DeepFM:
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -152,12 +153,14 @@ def _load_opt_mask_d(
     print("load mask d")
     initial_checkpoint = torch.load(initial_path, map_location="cpu")
     mask = initial_checkpoint["mask"]["mask_d"]
-    model.embedding.get_weight(mask)
+    weight = model.embedding.get_weight(mask)
 
     # Remove original weight
     model.embedding._weight.data = torch.empty(0)
 
     print("Num params", model.embedding.get_num_params())
+    if mem_optimized:
+        model.embedding = PrunedEmbedding.from_weight(weight)
     return model
 
 
@@ -167,12 +170,13 @@ def main(argv: Optional[Sequence[str]] = None):
     # Load checkpoint
     # model = DeepFM.load(args.checkpoint_path)
     # model = _load_dhe(args.checkpoint_path)
-    model = _load_pep(args.checkpoint_path)
+    # model = _load_pep(args.checkpoint_path)
     # model = _load_ttrec(args.checkpoint_path, True)
-    # model = _load_opt_mask_d(
-    #     args.checkpoint_path,
-    #     "checkpoints/deepfm/opt/initial.pth"
-    # )
+    model = _load_opt_mask_d(
+        args.checkpoint_path,
+        "checkpoints/deepfm/opt/initial.pth",
+        mem_optimized=True,
+    )
 
     #  Load data
     train_info = torch.load(args.train_info)

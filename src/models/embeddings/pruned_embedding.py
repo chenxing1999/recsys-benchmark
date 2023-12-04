@@ -32,9 +32,11 @@ class PrunedEmbedding(IEmbedding):
     @classmethod
     @torch.no_grad()
     def from_other_emb(cls, emb: IEmbedding, mode=None) -> "PrunedEmbedding":
-        weight = emb.get_weight()
-        num_item, hidden_size = weight.shape
+        return cls.from_weight(emb.get_weight(), mode)
 
+    @classmethod
+    def from_weight(cls, weight: torch.Tensor, mode=None) -> "PrunedEmbedding":
+        num_item, hidden_size = weight.shape
         result = cls(num_item, hidden_size, mode)
 
         weight = weight.to_sparse_csr()
