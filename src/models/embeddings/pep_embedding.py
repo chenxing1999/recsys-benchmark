@@ -118,9 +118,7 @@ class PepEmbeeding(IEmbedding):
 
     def get_sparsity(self, get_n_params=False) -> float:
         total_params = self.emb.weight.numel()
-        sparse_weight = self.soft_threshold(self.emb.weight, self.s)
-        # n_params = (sparse_weight != 0).sum(dtype=torch.int64).item()
-        n_params = torch.nonzero(sparse_weight).size(0)
+        n_params = self.get_num_params()
         if get_n_params:
             return (1 - n_params / total_params), n_params
         else:
@@ -128,7 +126,7 @@ class PepEmbeeding(IEmbedding):
 
     def get_num_params(self) -> int:
         sparse_weight = self.soft_threshold(self.emb.weight, self.s)
-        n_params = torch.nonzero(sparse_weight).size(0)
+        n_params = torch.count_nonzero(sparse_weight).item()
         return n_params
 
     def train_callback(self):
