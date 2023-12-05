@@ -7,6 +7,7 @@ model:
   p_dropout: 0.5
   embedding_config:
     name: vanilla
+    sparse: True
   use_batchnorm: True
 
 train_dataloader:
@@ -42,6 +43,7 @@ run_test: false
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
 num_epochs: 15
 log_step: 1000
+sparse: True
 
 weight_decay: 0.000001
 learning_rate: 0.001
