@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 from typing import Dict, Optional, Sequence
 
 import torch
@@ -149,6 +150,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     best_auc = 0
     num_epochs = config["num_epochs"]
+    start = time.time()
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -190,6 +192,8 @@ def main(argv: Optional[Sequence[str]] = None):
                     torch.save(checkpoint, config["checkpoint_path"])
     except KeyboardInterrupt:
         pass
+
+    logger.info(f"Total train time: {time.time() - start}s")
 
     if config["enable_profile"]:
         train_prof.stop()

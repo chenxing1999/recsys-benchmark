@@ -180,7 +180,7 @@ class CerpEmbedding(IEmbedding):
 
         n_params = 0
         for w in [self.sparse_p_weight, self.sparse_q_weight]:
-            n_params += torch.nonzero(w).size(0)
+            n_params += torch.count_nonzero(w).item()
 
         if get_n_params:
             return (1 - n_params / total_params), n_params
@@ -198,7 +198,7 @@ class CerpEmbedding(IEmbedding):
 
         n_params = 0
         for w in [self.sparse_p_weight, self.sparse_q_weight]:
-            n_params += torch.nonzero(w).size(0)
+            n_params += torch.count_nonzero(w).item()
         return n_params
 
     def get_prune_loss(self, K=100):

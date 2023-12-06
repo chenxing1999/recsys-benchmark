@@ -199,7 +199,7 @@ class OptEmbed(IOptEmbed):
 
     def get_sparsity(self, get_n_params=False):
         emb = self._mask_e_module(self._weight)
-        nnz = torch.nonzero(emb).size(0)
+        nnz = torch.count_nonzero(emb).item()
         nnz = int(nnz)
         sparsity = 1 - nnz / (emb.shape[0] * emb.shape[1])
         if get_n_params:
@@ -208,7 +208,7 @@ class OptEmbed(IOptEmbed):
 
     def get_num_params(self):
         emb = self._mask_e_module(self._weight)
-        nnz = torch.nonzero(emb).size(0)
+        nnz = torch.count_nonzero(emb).item()
         nnz = int(nnz)
         return nnz
 
@@ -608,7 +608,7 @@ class RetrainOptEmbed(IOptEmbed):
             return F.embedding_bag(x, self._cur_weight, mode=self._mode)
 
     def get_sparsity(self, get_n_params=False):
-        nnz = torch.nonzero(self._mask).size(0)
+        nnz = torch.count_nonzero(self._mask).item()
         sparsity = 1 - nnz / (self._hidden_size * self._num_item)
 
         if not get_n_params:
@@ -616,4 +616,4 @@ class RetrainOptEmbed(IOptEmbed):
         return sparsity, nnz
 
     def get_num_params(self):
-        return torch.nonzero(self._mask).size(0)
+        return torch.count_nonzero(self._mask).item()

@@ -144,7 +144,7 @@ def get_optimizers(
 
     lr_emb = config.get("learning_rate_emb", config["learning_rate"])
 
-    logger.debug("optimizer config: {sparse=} - {optimizer_name=} - {lr_emb=lr_emb}")
+    logger.debug(f"optimizer config: {sparse=} - {optimizer_name=} - {lr_emb=}")
 
     decay_param = []
     if sparse:
