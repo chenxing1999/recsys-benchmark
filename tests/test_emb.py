@@ -383,3 +383,67 @@ def test_dhe_without_cache_inference():
 
     with torch.no_grad():
         assert emb_with_cache(inp).isclose(emb_without_cache(inp)).all()
+
+
+@pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
+def test_tt_emb_pytorch_with_emb():
+    from src.models.embeddings.tensortrain_embeddings import TTEmbedding, TTRecTorch
+
+    num_item = 2048
+    hidden_size = 64
+
+    tt_ranks = [2, 4, 2]
+    tt_rec_torch = TTRecTorch(
+        num_item,
+        hidden_size,
+        tt_ranks,
+    )
+    tt_rec_torch.cuda()
+
+    emb_config = {
+        "name": "tt_emb",
+        "tt_ranks": tt_ranks,
+    }
+    inp = torch.arange(71, device="cuda")
+    emb: TTEmbedding = get_embedding(emb_config, num_item, hidden_size)
+
+    emb.cuda()
+    assert isinstance(emb, TTEmbedding)
+
+    # Copy weight from emb to tt_rec_torch
+    for core, core_torch in zip(emb._tt_emb.tt_cores, tt_rec_torch.tt_cores):
+        assert core_torch.data.shape == core.data.shape
+        core_torch.data = core.data
+
+    # Test forward logic
+    ori = emb(inp)
+    torch_out = tt_rec_torch(inp)
+
+    diff = (ori - torch_out).abs()
+    print(diff.max())
+    assert diff.max() < 1e-6
+
+    assert ori.isclose(torch_out).float().mean() > 0.95
+
+
+def test_tt_emb_pytorch():
+    from src.models.embeddings.tensortrain_embeddings import TTRecTorch
+
+    num_item = 512
+    hidden_size = 16
+
+    tt_ranks = [3, 3]
+    tt_rec_torch = TTRecTorch(
+        num_item,
+        hidden_size,
+        tt_ranks,
+    )
+
+    inp = torch.arange(10)
+    low_rank_approx = tt_rec_torch(inp)
+
+    w = tt_rec_torch.get_weight()
+
+    assert w[inp].isclose(low_rank_approx).float().mean() > 0.95
+    diff = (w[inp] - low_rank_approx).abs()
+    assert diff.max() < 1e-5
