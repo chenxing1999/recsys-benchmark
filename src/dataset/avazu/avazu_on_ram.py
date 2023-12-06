@@ -229,9 +229,9 @@ class AvazuOnRam(ICTRDataset):
 
 
 if __name__ == "__main__":
-    txt_path = "/home/hungt/tmp/train"
+    txt_path = "dataset/ctr/avazu/train"
     line_info = "dataset/ctr/avazu/train_test_info.bin"
 
-    binary = _create_binary(txt_path)
+    binary = _create_binary(txt_path, preprocess_timestamp=False)
     print("Total data", sum(len(binary[k]) for k in ["train", "val", "test"]))
     torch.save(binary, line_info)

@@ -9,6 +9,8 @@ model:
     name: vanilla
   use_batchnorm: True
 
+run_test: false
+
 train_dataloader:
   dataset:
     train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
@@ -37,9 +39,7 @@ test_dataloader:
   batch_size: 2048
   num_workers: 8
 
-run_test: false
-
-checkpoint_path: checkpoints/deepfm_checkpoint.pth
+checkpoint_path: /home/hungt/workspace/recsys-benchmark/checkpoints/deepfm/original.pth
 num_epochs: 15
 log_step: 1000
 

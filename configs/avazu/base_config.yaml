@@ -4,7 +4,7 @@ model:
     - 400
     - 400
     - 400
-  p_dropout: 0.5
+  p_dropout: 0.2
   embedding_config:
     name: vanilla
   use_batchnorm: True
@@ -14,7 +14,7 @@ train_dataloader:
     name: avazu_fm
     train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: train
-    dataset_path: /home/hungt/tmp/train
+    dataset_path: dataset/ctr/avazu/train
     cache_path: dataset/ctr/avazu/avazu-fm
   num_workers: 8
   batch_size: 2048
@@ -24,7 +24,7 @@ val_dataloader:
     name: avazu_fm
     train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: val
-    dataset_path: /home/hungt/tmp/train
+    dataset_path: dataset/ctr/avazu/train
     cache_path: dataset/ctr/avazu/avazu-fm
   batch_size: 2048
   num_workers: 8
@@ -34,14 +34,14 @@ test_dataloader:
     name: avazu_fm
     train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: test
-    dataset_path: /home/hungt/tmp/train
+    dataset_path: dataset/ctr/avazu/train
     cache_path: dataset/ctr/avazu/avazu-fm
   batch_size: 2048
   num_workers: 8
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint.pth
+checkpoint_path: checkpoints/deepfm_checkpoint-avazu.pth
 num_epochs: 15
 log_step: 1000
 
@@ -77,5 +77,5 @@ profilers:
 
 logger:
   level: INFO
-  log_folder: logs/deepfm
+  log_folder: logs/avazu
   log_name: original
