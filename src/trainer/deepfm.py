@@ -34,6 +34,9 @@ def train_epoch(
     train_time = datetime.timedelta()
     first_start = start = now()
 
+    import time
+    start_time = time.time()
+
     for idx, batch in enumerate(dataloader):
         load_data_time += now() - start
 
@@ -68,6 +71,9 @@ def train_epoch(
                     msg += f" - {metric}: {avg:.4}"
 
             loguru.logger.info(msg)
+            if idx == 1000:
+                print(time.time() - start_time)
+                exit()
 
         if profiler:
             profiler.step()
@@ -171,6 +177,9 @@ def train_epoch_cerp(
     train_time = datetime.timedelta()
     first_start = start = now()
 
+    import time
+    time_start = time.time()
+
     for idx, batch in enumerate(dataloader):
         load_data_time += now() - start
 
@@ -217,6 +226,10 @@ def train_epoch_cerp(
             loguru.logger.info(msg)
             if sparsity >= target_sparsity:
                 return loss_dict
+
+            if idx == 1000:
+                print(time.time() - time_start)
+                exit()
 
         if profiler:
             profiler.step()

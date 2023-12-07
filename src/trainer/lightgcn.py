@@ -46,6 +46,8 @@ def train_epoch(
         rec_loss=0,
         cl_loss=0,
     )
+    import time
+    start = time.time()
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
         all_user_emb, all_item_emb = model(adj)
@@ -103,6 +105,9 @@ def train_epoch(
                     msg += f" - {metric}: {avg:.2}"
 
             logger.info(msg)
+            if idx == 100:
+                print(time.time() - start)
+                exit()
 
         if profiler:
             profiler.step()
@@ -225,6 +230,9 @@ def train_epoch_optembed(
         cl_loss=0,
         loss_s=0,
     )
+
+    import time
+    start = time.time()
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
         all_user_emb, all_item_emb = model(adj)
@@ -293,6 +301,10 @@ def train_epoch_optembed(
                     msg += f" - {metric}: {avg:.4}"
 
             logger.info(msg)
+
+            if idx == 100:
+                print(time.time() - start)
+                exit()
 
             # DEBUG CODE ---
             # t_param = model.item_emb_table._mask_e_module._t_param

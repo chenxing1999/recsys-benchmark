@@ -44,6 +44,8 @@ def train_epoch(
     criterion = criterion.to(device)
 
     is_opt_embed = isinstance(model.embedding, OptEmbed)
+    import time
+    start = time.time()
     for idx, batch in enumerate(dataloader):
         inputs, labels = batch
 
@@ -82,6 +84,9 @@ def train_epoch(
                     msg += f" - {metric}: {avg:.4}"
 
             loguru.logger.info(msg)
+
+            if idx == 1000:
+                print(time.time() - start)
 
             # DEBUG CODE ---
             # t_param = model.embedding._mask_e_module._t_param

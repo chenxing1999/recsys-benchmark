@@ -1,10 +1,10 @@
 model:
-  num_factor: 64
+  num_factor: 16
   hidden_sizes:
     - 400
     - 400
     - 400
-  p_dropout: 0.2
+  p_dropout: 0.5
   use_batchnorm: True
   embedding_config:
     name: pep
@@ -14,32 +14,29 @@ model:
 
 train_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
+    path: dataset/ctr/criteo/new-ctr/train.txt
     cache_path: dataset/ctr/criteo/criteo-common-split/train.bin
-  num_workers: 8
-  batch_size: 1024
-  shuffle: True
+  num_workers: 0
+  batch_size: 2048
 
 val_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
+    path: dataset/ctr/criteo/new-ctr/val.txt
     cache_path: dataset/ctr/criteo/criteo-common-split/val.bin
-  batch_size: 1024
-  num_workers: 8
-  shuffle: True
+  batch_size: 2048
+  num_workers: 0
 
 test_dataloader:
   dataset:
-    path: dataset/ctr/criteo/train.txt
+    path: dataset/ctr/criteo/new-ctr/test.txt
     cache_path: dataset/ctr/criteo/criteo-common-split/test.bin
-  batch_size: 1024
-  num_workers: 8
-
+  batch_size: 2048
+  num_workers: 0
 run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
 num_epochs: 1000
-log_step: 2000
+log_step: 1000
 
 weight_decay: 0.00001
 learning_rate: 0.001

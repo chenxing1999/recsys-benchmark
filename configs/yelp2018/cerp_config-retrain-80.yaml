@@ -2,7 +2,7 @@
 # epoch - 10, ndcg: 0.0290
 model:
   name: lightgcn # lightgcn,hccf
-  num_layers: 4
+  num_layers: 3
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:

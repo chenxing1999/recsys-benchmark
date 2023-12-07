@@ -12,6 +12,10 @@ import torch.utils.data
 from loguru import logger
 from tqdm import tqdm
 
+@lru_cache(1)
+def _load_train_test_info(train_test_info):
+    return torch.load(train_test_info)
+
 
 class CriteoDataset(torch.utils.data.Dataset):
     """
@@ -54,7 +58,9 @@ class CriteoDataset(torch.utils.data.Dataset):
         self.env = lmdb.open(cache_path, create=False, lock=False, readonly=True)
 
         # hook my dataset
-        self._line_in_dataset = list(torch.load(train_test_info)[dataset_name])
+        self._line_in_dataset = list(
+            _load_train_test_info(train_test_info)[dataset_name]
+        )
         self._line_in_dataset.sort()
 
         with self.env.begin(write=False) as txn:

@@ -272,7 +272,7 @@ class RetrainCerpEmbedding(IEmbedding):
             torch.zeros(bucket_size, hidden_size),
         )
         init_weight = torch.load(init_weight_path)
-        assert init_weight["q_weight"].shape == (bucket_size, hidden_size)
+        assert init_weight["q_weight"].shape == (bucket_size, hidden_size), f"{bucket_size=}, {hidden_size=}, {init_weight['q_weight'].shape}"
         assert init_weight["p_weight"].shape == (bucket_size, hidden_size)
 
         self.q_weight.data = init_weight["q_weight"]
@@ -301,7 +301,7 @@ class RetrainCerpEmbedding(IEmbedding):
             threshold = checkpoint[threshold_name]
 
             mask = (weight.abs() - torch.sigmoid(threshold)) > 0
-            assert mask.shape == (self._bucket_size, self._hidden_size)
+            assert mask.shape == (self._bucket_size, self._hidden_size), f"{self._bucket_size=}, {mask.shape=}"
             masks.append(nn.Parameter(mask, False))
         return masks
 

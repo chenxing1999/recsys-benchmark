@@ -166,7 +166,9 @@ def main(argv: Optional[Sequence[str]] = None):
     early_stop_count = 0
     early_stop_config = config.get("early_stop_patience", 0)
     warmup = config.get("warmup", 0)
-    for epoch_idx in range(num_epochs):
+    import time
+    start = time.time()
+    for epoch_idx in range(1):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = train_epoch(
             train_dataloader,
@@ -218,6 +220,7 @@ def main(argv: Optional[Sequence[str]] = None):
                 if early_stop_config and early_stop_count > early_stop_config:
                     return
 
+    print(time.time() - start)
     if config["enable_profile"]:
         train_prof.stop()
         val_prof.stop()

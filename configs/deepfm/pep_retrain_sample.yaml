@@ -14,31 +14,24 @@ model:
 
 train_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    my_path: dataset/ctr/criteo/criteo-common-split/train.bin
-    dataset_name: train
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
-  num_workers: 8
+    path: dataset/ctr/criteo/new-ctr/train.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/train.bin
+  num_workers: 0
   batch_size: 2048
 
 val_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    dataset_name: val
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    path: dataset/ctr/criteo/new-ctr/val.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/val.bin
   batch_size: 2048
-  num_workers: 8
+  num_workers: 0
 
 test_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    dataset_name: test
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    path: dataset/ctr/criteo/new-ctr/test.txt
+    cache_path: dataset/ctr/criteo/criteo-common-split/test.bin
   batch_size: 2048
-  num_workers: 8
+  num_workers: 0
 
 run_test: false
 

@@ -2,7 +2,7 @@
 # epoch - 10, ndcg: 0.0290
 model:
   name: lightgcn # lightgcn,hccf
-  num_layers: 4
+  num_layers: 3
   hidden_size: 64
   p_dropout: 0.0
   embedding_config:
@@ -15,9 +15,9 @@ train_dataloader:
     path: dataset/cf/yelp2018/model_train.txt
     adj_style: lightgcn # lightgcn or hccf
     sampling_method: popularity
-    num_neg_item: 5
+    num_neg_item: 1
   num_workers: 4
-  batch_size: 10
+  batch_size: 2048
 
 val_dataloader:
   dataset:
@@ -35,7 +35,7 @@ run_test: false
 
 checkpoint_path: checkpoints/checkpoint.pth
 num_epochs: 50
-log_step: 1000
+log_step: 100
 
 cerp:
   gamma_init: 0.0001

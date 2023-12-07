@@ -96,6 +96,8 @@ def train_epoch_cerp(
         prune_loss=0,
     )
     clip_grad_norm = 100
+    import time
+    start = time.time()
     for idx, batch in enumerate(dataloader):
         users, pos_items, neg_items = batch
         all_user_emb, all_item_emb = model(adj)
@@ -201,6 +203,9 @@ def train_epoch_cerp(
                     msg += f" - {metric}: {avg:.2}"
 
             logger.info(msg)
+            if idx == 100:
+                print(time.time() - start)
+                exit()
             if sparsity >= target_sparsity:
                 return loss_dict
 

@@ -36,6 +36,9 @@ def train_epoch(
     loss_dict = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
+
+    import time
+    start = time.time()
     for idx, batch in enumerate(dataloader):
         inputs, labels = batch
 
@@ -67,6 +70,9 @@ def train_epoch(
 
             loguru.logger.info(msg)
             model.embedding.train_callback()
+            if idx == 1000:
+                print(time.time() - start)
+                exit()
 
         if profiler:
             profiler.step()

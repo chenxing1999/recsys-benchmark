@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from functools import partial
+from functools import partial, lru_cache
 from typing import DefaultDict, Dict, Optional
 
 import torch
@@ -12,7 +12,6 @@ from .utils import NUM_FEATS, NUM_INT_FEATS, convert_numeric_feature, get_cache_
 
 # feat_mapper[FeatureIndex][FeatureValue] = FeatureId
 FeatMapper = Dict[int, Dict[str, int]]
-
 
 class CriteoIterDataset(IterableDataset, ICriteoDatset):
     """
@@ -28,6 +27,7 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
         self,
         path: str,
         cache_path: str,
+        train_test_info: Optional[str]=None,
         min_threshold=10,
         feat_mappers: Optional[FeatMapper] = None,
         defaults: Optional[Dict[int, int]] = None,
@@ -71,6 +71,7 @@ class CriteoIterDataset(IterableDataset, ICriteoDatset):
 
         self._defaults = defaults
         self._feat_mappers = feat_mappers
+
         # Construct actual feat mapper dictionary
         self.feat_mappers: Dict[int, DefaultDict[str, int]] = {}
         for i, values in feat_mappers.items():
