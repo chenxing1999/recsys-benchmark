@@ -19,6 +19,7 @@ class DeepFM(nn.Module):
         p_dropout: float = 0.1,
         use_batchnorm=False,
         embedding_config: Optional[Dict] = None,
+        empty_embedding=False,
     ):
         """
         Args:
@@ -35,13 +36,15 @@ class DeepFM(nn.Module):
             embedding_config = {"name": "vanilla"}
 
         num_inputs = sum(field_dims)
-        self.embedding = get_embedding(
-            embedding_config,
-            field_dims,
-            num_factor,
-            mode=None,
-            field_name="deepfm",
-        )
+
+        if not empty_embedding:
+            self.embedding = get_embedding(
+                embedding_config,
+                field_dims,
+                num_factor,
+                mode=None,
+                field_name="deepfm",
+            )
 
         self.fc = nn.EmbeddingBag(num_inputs, 1, mode="sum")
         self.linear_layer = nn.Linear(1, 1)
@@ -106,7 +109,7 @@ class DeepFM(nn.Module):
         return torch.argsort(scores, descending=True)
 
     @classmethod
-    def load(cls, checkpoint: Union[str, Dict[str, Any]], strict=True) -> "DeepFM":
+    def load(cls, checkpoint: Union[str, Dict[str, Any]], strict=True, *, empty_embedding=False) -> "DeepFM":
         if isinstance(checkpoint, str):
             checkpoint = torch.load(checkpoint, map_location="cpu")
 
@@ -114,7 +117,7 @@ class DeepFM(nn.Module):
         model_config = checkpoint["model_config"]
         field_dims = checkpoint["field_dims"]
 
-        model = cls(field_dims, **model_config)
+        model = cls(field_dims, **model_config, empty_embedding=empty_embedding)
         model.load_state_dict(checkpoint["state_dict"], strict=strict)
         return model
 

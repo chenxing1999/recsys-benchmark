@@ -13,6 +13,8 @@ from src.utils import set_seed
 
 set_seed(2023)
 
+# MODES = ["original", "qr", "cerp", "dhe", "ttrec", "opt", "opt-cpu", "pep", "ttrec-cpu"]
+
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -30,7 +32,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     parser.add_argument("--batch_size", "-b", default=64, type=int)
     parser.add_argument(
-        "--run-ranking", action="store_true", help="Run ranking after inference"
+        "--task", "-t", help="Which task to run (infer, load_model, ranking, nothing)",
+        default="infer",
     )
     parser.add_argument(
         "--run-small-file",
@@ -38,7 +41,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Run small file (100 record) in tests/assets instead of full data",
     )
 
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--mode",
+        "-m",
+        default="original",
+        help="Mode to load model weight",
+    )
+
+    args = parser.parse_args(argv)
+    # assert args.mode in MODES
+
+    return args
 
 
 def read_small_file(
@@ -102,6 +115,9 @@ def read_big_file(
             if count == batch_size:
                 break
 
+            if count % 100 == 0:
+                print(f"{count} / {batch_size}")
+
     inps_tensor = torch.stack(inps, dim=0)
     label_tensor = torch.tensor(labels)
     return inps_tensor, label_tensor
@@ -117,9 +133,19 @@ def _load_dhe(checkpoint_path: str):
 
 def _load_pep(checkpoint_path: str):
     """convert pep to pruned version"""
-    model = DeepFM.load(checkpoint_path)
-    model.embedding = PrunedEmbedding.from_other_emb(model.embedding)
-    return model
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    if checkpoint["model_config"]["embedding_config"]["name"] != "pruned-sparse-csr":
+        model = DeepFM.load(checkpoint, strict=False)
+        model.embedding = PrunedEmbedding.from_other_emb(model.embedding)
+        return model
+
+    sparse_w = checkpoint["state_dict"].pop("embedding.sparse_w")
+    model = DeepFM.load(checkpoint, empty_embedding=True)
+    # setattr(model, "embedding", PrunedEmbedding.from_weight(sparse_w)) 
+    model.register_module("embedding", PrunedEmbedding.from_weight(sparse_w))
+    return model 
+
 
 
 def _load_ttrec(checkpoint_path: str, cache=False):
@@ -167,16 +193,29 @@ def _load_opt_mask_d(
 def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
 
+    if args.task == "nothing":
+        return
+
     # Load checkpoint
-    # model = DeepFM.load(args.checkpoint_path)
-    # model = _load_dhe(args.checkpoint_path)
-    # model = _load_pep(args.checkpoint_path)
-    # model = _load_ttrec(args.checkpoint_path, True)
-    model = _load_opt_mask_d(
-        args.checkpoint_path,
-        "checkpoints/deepfm/opt/initial.pth",
-        mem_optimized=True,
-    )
+    if args.mode in ["original", "qr", "cerp", "ttrec-cpu"]:
+        model = DeepFM.load(args.checkpoint_path)
+    elif args.mode == "dhe":
+        model = _load_dhe(args.checkpoint_path)
+    elif args.mode in ["pep", "opt-cpu"]:
+        model = _load_pep(args.checkpoint_path)
+    elif args.mode == "ttrec":
+        model = _load_ttrec(args.checkpoint_path, True)
+    elif args.mode == "opt":
+        model = _load_opt_mask_d(
+            args.checkpoint_path,
+            "checkpoints/deepfm/opt/initial.pth",
+            mem_optimized=True,
+        )
+    else:
+        raise ValueError()
+
+    if args.task == "load_model":
+        return
 
     #  Load data
     train_info = torch.load(args.train_info)
@@ -202,6 +241,7 @@ def main(argv: Optional[Sequence[str]] = None):
     model.eval()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
+
     model.to(device)
     if isinstance(model.embedding, PrunedEmbedding) and device == "cuda":
         model.embedding.to_cuda()
@@ -222,7 +262,7 @@ def main(argv: Optional[Sequence[str]] = None):
         # wait for data move to gpu
         torch.cuda.synchronize()
 
-    if args.run_ranking:
+    if args.task == "ranking":
         print("--- Ranking ---")
         start = time.time()
         with torch.no_grad():
