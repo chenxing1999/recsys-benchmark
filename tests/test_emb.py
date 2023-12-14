@@ -116,8 +116,7 @@ GENERAL_EMB = [
     if (
         not name.startswith("pep")
         and not name.startswith("deepfm")
-        and name != "cerp_retrain"
-        and name != "tt_emb"
+        and name not in ["tt_emb", "cerp_retrain", "tt_emb_torch"]
     )
 ]
 
@@ -246,6 +245,20 @@ def test_tt_emb_api_lightgcn():
     assert res.shape == (num_item, hidden_size)
 
 
+def test_tt_emb_torch_api_lightgcn():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb_torch",
+        "tt_ranks": [2, 4, 2],
+    }
+    emb = get_embedding(emb_config, num_item, hidden_size)
+    res = emb.get_weight()
+
+    assert res.shape == (num_item, hidden_size)
+
+
 @pytest.mark.skipif(not TT_EMB_AVAILABLE, reason="TT Embedding is not available")
 def test_tt_emb_result_lightgcn():
     num_item = 3
@@ -280,6 +293,22 @@ def test_tt_emb_result_deepfm():
     inp = torch.tensor([[1, 2, 0], [1, 2, 0]], device="cuda")
     emb = get_embedding(emb_config, num_item, hidden_size)
     emb = emb.to("cuda")
+    res = emb(inp)
+
+    assert res.shape == (2, 3, hidden_size)
+    assert (res[0] == res[1]).all()
+
+
+def test_tt_emb_torch_result_deepfm():
+    num_item = 3
+    hidden_size = 8
+
+    emb_config = {
+        "name": "tt_emb_torch",
+        "tt_ranks": [2, 4, 2],
+    }
+    inp = torch.tensor([[1, 2, 0], [1, 2, 0]])
+    emb = get_embedding(emb_config, num_item, hidden_size)
     res = emb(inp)
 
     assert res.shape == (2, 3, hidden_size)
