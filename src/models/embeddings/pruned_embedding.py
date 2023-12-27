@@ -83,7 +83,7 @@ class PrunedEmbedding(IEmbedding):
     def _to_torch(self, x) -> torch.Tensor:
         """Convert x into torch.Tensor"""
         if self.is_cuda:
-            return torch.as_tensor(x)
+            return torch.as_tensor(x, device="cuda")
         else:
             return torch.from_numpy(x)
 

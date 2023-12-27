@@ -272,13 +272,23 @@ class RetrainCerpEmbedding(IEmbedding):
             torch.zeros(bucket_size, hidden_size),
         )
         init_weight = torch.load(init_weight_path)
-        assert init_weight["q_weight"].shape == (bucket_size, hidden_size)
-        assert init_weight["p_weight"].shape == (bucket_size, hidden_size)
 
-        self.q_weight.data = init_weight["q_weight"]
-        self.p_weight.data = init_weight["p_weight"]
+        init_correct = False
+        try:
+            assert init_weight["q_weight"].shape == (bucket_size, hidden_size)
+            assert init_weight["p_weight"].shape == (bucket_size, hidden_size)
+            init_correct = True
+        except AssertionError:
+            logger.warning("Init weight is not correct. This is expected for inference")
 
-        self.q_mask, self.p_mask = self.load_mask(mask_weight_path)
+        if init_correct:
+            self.q_weight.data = init_weight["q_weight"]
+            self.p_weight.data = init_weight["p_weight"]
+            self.q_mask, self.p_mask = self.load_mask(mask_weight_path)
+        else:
+            self.q_mask, self.p_mask = nn.Parameter(
+                torch.zeros(self._bucket_size, self._hidden_size)
+            ), nn.Parameter(torch.zeros(self._bucket_size, self._hidden_size))
 
         self._num_item = num_item
         self._hidden_size = hidden_size
@@ -287,6 +297,9 @@ class RetrainCerpEmbedding(IEmbedding):
         self.q_entity_per_row = int(np.ceil(self._num_item / self._bucket_size))
         logger.debug(f"{self.q_entity_per_row=}")
         self._sparse = sparse
+
+        self.sparse_p_weight = None
+        self.sparse_q_weight = None
 
     def load_mask(self, weight_path: str) -> List[nn.Parameter]:
         checkpoint = torch.load(weight_path, map_location="cpu")
@@ -314,9 +327,12 @@ class RetrainCerpEmbedding(IEmbedding):
     def forward(self, x):
         q_idx = torch.div(x, self.q_entity_per_row, rounding_mode="trunc")
         p_idx = x % self._bucket_size
+        if self.sparse_q_weight is None or self.training:
+            self.sparse_q_weight = self.q_weight * self.q_mask
+            self.sparse_p_weight = self.p_weight * self.p_mask
 
-        sparse_q_weight = self.q_weight * self.q_mask
-        sparse_p_weight = self.p_weight * self.p_mask
+        sparse_q_weight = self.sparse_q_weight
+        sparse_p_weight = self.sparse_p_weight
 
         # get user, items' corresponding embedding vectors in Q, R matrices
         if self._mode is None:
@@ -342,3 +358,14 @@ class RetrainCerpEmbedding(IEmbedding):
 
             emb = batch_Q_v + batch_P_v
             return emb.max(dim=1)[0]
+
+    def get_num_params(self):
+        if self.sparse_p_weight is None:
+            return (
+                torch.count_nonzero(self.q_mask) + torch.count_nonzero(self.p_mask)
+            ).item()
+
+        return (
+            torch.count_nonzero(self.sparse_p_weight)
+            + torch.count_nonzero(self.sparse_q_weight)
+        ).item()
