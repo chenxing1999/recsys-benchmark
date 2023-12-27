@@ -593,6 +593,8 @@ class RetrainOptEmbed(IOptEmbed):
         return self._mask
 
     def get_weight(self):
+        if self._cur_weight is not None and not self.training:
+            return self._cur_weight
         assert self._mask is not None, "Mask is not initialized"
 
         self._cur_weight = self._weight * self._mask
