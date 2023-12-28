@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 from loguru import logger
 
@@ -19,6 +19,7 @@ def get_ctr_dataset(
     if "name" in dataset_config:
         name = dataset_config.pop("name")
 
+    dataset_cls: Type[ICTRDataset]
     if name == "criteo":
         dataset_cls = get_dataset_cls(dataloader_config)
     elif name == "avazu_on_ram" or name == "avazu":

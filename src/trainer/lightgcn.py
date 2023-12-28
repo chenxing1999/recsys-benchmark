@@ -1,12 +1,12 @@
 """Define training and evaluating logic for LightGCN"""
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Union, cast
 
 import torch
 from loguru import logger
 from torch.utils.data import DataLoader
 
 from src import metrics as metric_utils
-from src.dataset.cf_graph_dataset import CFGraphDataset
+from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore
 from src.models.lightgcn import LightGCN, SingleLightGCN, get_sparsity_and_param
@@ -32,7 +32,8 @@ def train_epoch(
         rec_loss
         cl_loss
     """
-    adj = dataloader.dataset.get_norm_adj()
+    train_dataset = cast(CFGraphDataset, dataloader.dataset)
+    adj = train_dataset.get_norm_adj()
 
     model.train()
     model.to(device)
@@ -117,7 +118,7 @@ def train_epoch(
 @torch.no_grad()
 def validate_epoch(
     train_dataset: CFGraphDataset,
-    val_loader: DataLoader,
+    val_loader: DataLoader[TestCFGraphDataset],
     model: IGraphBaseCore,
     device="cuda",
     k=20,
@@ -196,7 +197,7 @@ def validate_epoch(
 
 def train_epoch_optembed(
     dataloader: DataLoader,
-    model: IGraphBaseCore,
+    model: Union[LightGCN, SingleLightGCN],
     optimizers: List[torch.optim.Optimizer],
     device="cuda",
     log_step=10,
@@ -211,7 +212,10 @@ def train_epoch_optembed(
         - Add `alpha` (weight for l_s)
         - Use multiple optimizers instead of one.
     """
-    adj = dataloader.dataset.get_norm_adj()
+    from src.models.embeddings.lightgcn_opt_embed import OptEmbed
+
+    train_dataset = cast(CFGraphDataset, dataloader.dataset)
+    adj = train_dataset.get_norm_adj()
     assert isinstance(model, (LightGCN, SingleLightGCN))
 
     model.train()
@@ -263,9 +267,16 @@ def train_epoch_optembed(
 
         loss = rec_loss + weight_decay * reg_loss + info_nce_loss
         if isinstance(model, LightGCN):
+            # typehint for mypy
+            model.user_emb_table = cast(OptEmbed, model.user_emb_table)
+            model.item_emb_table = cast(OptEmbed, model.item_emb_table)
+
             loss_s = model.user_emb_table.get_l_s()
             loss_s = loss_s + model.item_emb_table.get_l_s()
         elif isinstance(model, SingleLightGCN):
+            # typehint for mypy
+            model.emb_table = cast(OptEmbed, model.emb_table)
+
             loss_s = model.emb_table.get_l_s()
         else:
             raise ValueError()
