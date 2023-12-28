@@ -6,7 +6,7 @@ from loguru import logger
 from torch.utils.data import DataLoader
 
 from src import metrics as metric_utils
-from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
+from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.losses import bpr_loss, info_nce
 from src.models import IGraphBaseCore
 from src.models.lightgcn import LightGCN, SingleLightGCN, get_sparsity_and_param
@@ -118,7 +118,7 @@ def train_epoch(
 @torch.no_grad()
 def validate_epoch(
     train_dataset: CFGraphDataset,
-    val_loader: DataLoader[TestCFGraphDataset],
+    val_loader: DataLoader,
     model: IGraphBaseCore,
     device="cuda",
     k=20,
