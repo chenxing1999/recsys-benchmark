@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, cast
 
 import loguru
 import torch
@@ -29,7 +29,7 @@ def train_epoch(
     model.train()
     model.to(device)
 
-    loss_dict = dict(loss=0)
+    loss_dict: Dict[str, float] = dict(loss=0)
     criterion = torch.nn.BCEWithLogitsLoss()
     criterion = criterion.to(device)
 
@@ -114,7 +114,7 @@ def validate_epoch(
     criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
     criterion = criterion.to(device)
 
-    log_loss = 0
+    log_loss = 0.0
     all_y_true = []
     all_y_pred = []
 
@@ -157,10 +157,12 @@ def train_epoch_cerp(
         - Check sparsity per log step
 
     """
+    from src.models.embeddings.cerp_embedding import CerpEmbedding
+
     model.train()
     model.to(device)
 
-    loss_dict = dict(
+    loss_dict: Dict[str, float] = dict(
         loss=0,
         prune_loss=0,
         log_loss=0,
@@ -173,6 +175,7 @@ def train_epoch_cerp(
     load_data_time = datetime.timedelta()
     train_time = datetime.timedelta()
     first_start = start = now()
+    model.embedding = cast(CerpEmbedding, model.embedding)
 
     for idx, batch in enumerate(dataloader):
         load_data_time += now() - start

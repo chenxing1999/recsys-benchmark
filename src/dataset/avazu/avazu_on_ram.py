@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Dict, Final, List, Literal, Optional, Tuple
+from typing import Any, DefaultDict, Dict, Final, List, Literal, Optional, Tuple
 
 import torch
 from loguru import logger
@@ -40,7 +40,9 @@ def _create_binary(
         "preprocess_timestamp": preprocess_timestamp,
     }
 
-    feat_cnts = defaultdict(lambda: defaultdict(int))
+    feat_cnts: DefaultDict[DefaultDict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
 
     line_indices = []
     labels = []

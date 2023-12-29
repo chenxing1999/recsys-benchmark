@@ -1,7 +1,7 @@
 """Code used to benchmark maximum RAM usage for LightGCN inference"""
 import argparse
 import time
-from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple, cast
 
 import torch
 import yaml  # type: ignore
@@ -10,6 +10,7 @@ from mypy_extensions import i64
 from src.metrics import get_env_metrics
 from src.models import IGraphBaseCore, get_graph_model  # type: ignore
 from src.models.embeddings.pruned_embedding import PrunedEmbedding
+from src.models.lightgcn import LightGCN
 
 
 class Timer:
@@ -19,10 +20,10 @@ class Timer:
     topk: float
 
     def __init__(self):
-        self.forward = 0
-        self.matching = 0
-        self.filter_time = 0
-        self.topk = 0
+        self.forward = 0.0
+        self.matching = 0.0
+        self.filter_time = 0.0
+        self.topk = 0.0
 
     def __repr__(self):
         return (
@@ -202,6 +203,7 @@ def _load_pep(
         num_items,
         model_config,
     )
+    model = cast(LightGCN, model)
 
     checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
     model.load_state_dict(checkpoint["state_dict"], strict=False)
@@ -251,6 +253,8 @@ def _load_optembed(
     num_items,
     device: str = "cpu",
 ):
+    from src.models.embeddings.lightgcn_opt_embed import RetrainOptEmbed
+
     model_config = config["model"]
     model = get_graph_model(
         num_users,
@@ -261,12 +265,15 @@ def _load_optembed(
     checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
     model.load_state_dict(checkpoint["state_dict"], strict=False)
 
-    for emb in [model.item_emb_table, model.user_emb_table]:
+    embs = [model.item_emb_table, model.user_emb_table]
+    embs = cast(List[RetrainOptEmbed], embs)
+
+    for emb in embs:
         emb._cur_weight = emb._weight * emb._mask
         emb._cur_weight = emb._cur_weight.to(device)
-        emb._full_mask_d = None
-        emb._mask = None
-        emb._weight = None
+        emb._full_mask_d = None  # type: ignore
+        emb._mask = None  # type: ignore
+        emb._weight = None  # type: ignore
 
     model.to(device)
 
@@ -381,7 +388,4 @@ def main(argv: Optional[Sequence[str]] = None):
 
 
 if __name__ == "__main__":
-    pass
-
     main()
-    # tracemalloc.stop()

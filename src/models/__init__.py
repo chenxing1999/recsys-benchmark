@@ -1,10 +1,11 @@
-from typing import Dict
+from typing import Dict, Type
 
 import torch
 
+from src.models.lightgcn import LightGCN, SingleLightGCN
+
 from .base import IGraphBaseCore
 from .hccf import HCCFModelCore
-from .lightgcn import LightGCN, SingleLightGCN
 
 
 def get_graph_model(
@@ -17,7 +18,7 @@ def get_graph_model(
     # pop name for ** trick
     name = model_config.pop("name")
 
-    name_to_cls = {
+    name_to_cls: Dict[str, Type[IGraphBaseCore]] = {
         "lightgcn": LightGCN,
         "single-lightgcn": SingleLightGCN,
         "hccf": HCCFModelCore,
