@@ -13,7 +13,7 @@ from .optembed_utils import _MaskEmbeddingModule, _sampling_by_weight, get_mask
 
 
 class IOptEmbed(IEmbedding):
-    def get_weight(self, mask_d: Optional[torch.Tensor] = None):
+    def get_weight(self, mask_d: Optional[torch.Tensor] = None) -> torch.Tensor:
         ...
 
     def forward(self, x, mask_d=None):
@@ -544,7 +544,7 @@ class RetrainOptEmbed(IOptEmbed):
         self._mode = mode
 
         self._weight = nn.Parameter(torch.empty((self._num_item, hidden_size)))
-        self._cur_weight = None
+        self._cur_weight: Optional[torch.Tensor] = None
         nn.init.xavier_uniform_(self._weight)
 
         # Mask E related logic
@@ -592,7 +592,7 @@ class RetrainOptEmbed(IOptEmbed):
 
         return self._mask
 
-    def get_weight(self):
+    def get_weight(self) -> torch.Tensor:
         if self._cur_weight is not None and not self.training:
             return self._cur_weight
         assert self._mask is not None, "Mask is not initialized"
