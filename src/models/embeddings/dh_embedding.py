@@ -30,6 +30,7 @@ class DHEmbedding(IEmbedding):
         cached: bool = True,
         prime_file: Optional[str] = None,
         cache_path: str = "",
+        compute_v2=False,
     ):
         """
         Args:
@@ -47,6 +48,10 @@ class DHEmbedding(IEmbedding):
                 (prime number precomputed that are larger than 1e6)
 
             cache_path: Path to hashed value initialization
+
+            compute_v2:
+                Run embedding -> Unique -> DHE -> Reverse Unique -> result
+                (original flow: Embedding -> DHE -> Result)
         """
         super().__init__()
 
@@ -95,11 +100,14 @@ class DHEmbedding(IEmbedding):
 
             inp_size = size
 
+        # self._seq = torch.compile(nn.Sequential(*layers))
         self._seq = nn.Sequential(*layers)
         self._cache: Union[List[None], torch.Tensor] = [None] * self._num_item
         self._use_cache = cached
         self._use_bn = use_bn
         self._out_size = out_size
+
+        self.compute_v2 = compute_v2
 
         self._mode = mode
         logger.debug(f"Num params: {self.get_num_params()}")
@@ -113,9 +121,11 @@ class DHEmbedding(IEmbedding):
                     torch.save(self._cache, cache_path)
 
     def get_weight(self):
+        device = self._seq[0].weight.device
+        # device = "cuda"
         arr = torch.arange(
             self._num_item,
-            device=self._seq[0].weight.device,
+            device=device,
         )
         return self(arr)
 
@@ -170,9 +180,30 @@ class DHEmbedding(IEmbedding):
 
     def forward(self, inp: Union[torch.IntTensor, torch.LongTensor]):
         device = self._seq[0].weight.device
+        # device = "cuda"
         mode = self._mode
+        if self.compute_v2:
+            uniques, inverse_idx = inp.unique(return_inverse=True)
+            cache = self._cache
+            if cache.device != device:
+                logger.warning(
+                    "Cache device ({cache.device})"
+                    "is different from MLP device ({device})"
+                )
+            cache = cache.to(device)
+
+            x = F.embedding(uniques, cache)
+            x = self._forward_mlp(x)
+            result = x[inverse_idx]
+            return result
+
         if self._use_cache and isinstance(self._cache, torch.Tensor):
             cache = self._cache
+            if cache.device != device:
+                logger.warning(
+                    "Cache device ({cache.device})"
+                    "is different from MLP device ({device})"
+                )
             cache = cache.to(device)
 
             if mode is None:
