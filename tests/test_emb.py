@@ -447,3 +447,39 @@ def test_tt_emb_pytorch():
     assert w[inp].isclose(low_rank_approx).float().mean() > 0.95
     diff = (w[inp] - low_rank_approx).abs()
     assert diff.max() < 1e-5
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_dhe_compute_v2_cuda():
+    field_dims = [23, 31]
+    emb = DHEmbedding(field_dims, 64, inp_size=64, hidden_sizes=[32, 32])
+    emb.eval()
+
+    emb.cuda()
+    inp = torch.randint(sum(field_dims), size=(12, 2), device="cuda")
+
+    with torch.no_grad():
+        emb.compute_v2 = False
+        res1 = emb(inp)
+
+        emb.compute_v2 = True
+        res2 = emb(inp)
+        assert res1.isclose(res2).all()
+
+
+def test_dhe_compute_v2_nocuda():
+    field_dims = [23, 31]
+    emb = DHEmbedding(field_dims, 64, inp_size=64, hidden_sizes=[32, 32])
+    emb.eval()
+
+    device = "cpu"
+    emb.to(device)
+    inp = torch.randint(sum(field_dims), size=(12, 2), device=device)
+
+    with torch.no_grad():
+        emb.compute_v2 = False
+        res1 = emb(inp)
+
+        emb.compute_v2 = True
+        res2 = emb(inp)
+        assert res1.isclose(res2).all()
