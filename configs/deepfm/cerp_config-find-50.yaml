@@ -6,9 +6,9 @@ model:
     - 400
   p_dropout: 0.5
   embedding_config:
-    name: cerp_retrain
-    bucket_size: 140000
-    checkpoint_weight_dir: checkpoints/cerp/trial/
+    name: cerp
+    bucket_size: 320000
+    threshold_init: -100
   use_batchnorm: True
 
 train_dataloader:
@@ -19,7 +19,7 @@ train_dataloader:
     dataset_path: dataset/ctr/criteo/train.txt
     cache_path: dataset/ctr/criteo/criteo-fm
   num_workers: 8
-  batch_size: 2048
+  batch_size: 1024
 
 val_dataloader:
   dataset:
@@ -41,7 +41,7 @@ test_dataloader:
 
 cerp:
   gamma_init: 0.0001
-  target_sparsity: 0.8
+  target_sparsity: 0.5
   # gamma_init: 1
   gamma_decay: 0.5
   weight_decay: 0.00001 # not used for deepfm
@@ -52,8 +52,8 @@ cerp:
 run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
-num_epochs: 15
-log_step: 1000
+num_epochs: 20
+log_step: 500
 
 weight_decay: 0.00001
 learning_rate: 0.001
