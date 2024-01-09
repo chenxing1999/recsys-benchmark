@@ -22,7 +22,7 @@ set_seed(2023)
 def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Namespace]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
-    parser.add_argument("--target-sparsity", default=None)
+    parser.add_argument("--target-sparsity", default=None, type=float)
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
