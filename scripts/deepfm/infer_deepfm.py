@@ -134,7 +134,8 @@ def _load_ttrec(checkpoint_path: str, cache=False):
     model = DeepFM.load(checkpoint, strict=False)
     model.to("cuda")
     if cache:
-        model.embedding._tt_emb.cache_populate()
+        # model.embedding._tt_emb.cache_populate()
+        model.embedding._tt_emb.warmup = False
     return model
 
 
@@ -158,9 +159,23 @@ def _load_opt_mask_d(
     # Remove original weight
     model.embedding._weight.data = torch.empty(0)
 
-    print("Num params", model.embedding.get_num_params())
     if mem_optimized:
         model.embedding = PrunedEmbedding.from_weight(weight)
+    return model
+
+
+def _load_cerp(checkpoint_path):
+    model = DeepFM.load(checkpoint_path)
+
+    emb = model.embedding
+    emb.sparse_p_weight = emb.p_weight * emb.p_mask
+    emb.sparse_q_weight = emb.q_weight * emb.q_mask
+
+    emb.p_weight = None
+    emb.q_weight = None
+    emb.q_mask = None
+    emb.p_mask = None
+
     return model
 
 
@@ -172,12 +187,14 @@ def main(argv: Optional[Sequence[str]] = None):
     # model = _load_dhe(args.checkpoint_path)
     # model = _load_pep(args.checkpoint_path)
     # model = _load_ttrec(args.checkpoint_path, True)
-    model = _load_opt_mask_d(
-        args.checkpoint_path,
-        "checkpoints/deepfm/opt/initial.pth",
-        mem_optimized=True,
-    )
+    # model = _load_opt_mask_d(
+    #     args.checkpoint_path,
+    #     "checkpoints/deepfm/opt/initial.pth",
+    #     mem_optimized=True,
+    # )
+    model = _load_cerp(args.checkpoint_path)
 
+    print("Num params", model.embedding.get_num_params())
     #  Load data
     train_info = torch.load(args.train_info)
 
@@ -203,6 +220,8 @@ def main(argv: Optional[Sequence[str]] = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model.to(device)
+    model.embedding.sparse_p_weight = model.embedding.sparse_p_weight.to(device)
+    model.embedding.sparse_q_weight = model.embedding.sparse_q_weight.to(device)
     if isinstance(model.embedding, PrunedEmbedding) and device == "cuda":
         model.embedding.to_cuda()
 
