@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 import torch
 from loguru import logger
@@ -106,9 +106,11 @@ class DeepFM(nn.Module):
         return torch.argsort(scores, descending=True)
 
     @classmethod
-    def load(cls, checkpoint: Union[str, Dict], strict=True) -> "DeepFM":
+    def load(cls, checkpoint: Union[str, Dict[str, Any]], strict=True) -> "DeepFM":
         if isinstance(checkpoint, str):
             checkpoint = torch.load(checkpoint, map_location="cpu")
+
+        checkpoint = cast(Dict[str, Any], checkpoint)
         model_config = checkpoint["model_config"]
         field_dims = checkpoint["field_dims"]
 
@@ -194,6 +196,7 @@ def get_optimizers(
                             lr=config["learning_rate"],
                         ),
                     ],
+                    config["learning_rate"],  # actually required but have no meaning
                 )
             ]
 

@@ -254,13 +254,14 @@ class TTRecTorch(IEmbedding):
         )[: self.num_embeddings, : self.embedding_dim]
 
     def forward(self, x):
+        flatten_ind = x.flatten()
         return tt_rec_torch_forward(
-            x,
+            flatten_ind,
             self.tt_p_shapes,
             self.tt_q_shapes,
             self.tt_ranks,
             self.tt_cores,
-        )
+        ).reshape(*x.shape, self.embedding_dim)
 
     def copy_weight_fbtt_weight(self, emb: TTEmbedding):
         """Copy weight from the original implementation"""

@@ -3,6 +3,7 @@ requires = [
     "setuptools>=61",
     "setuptools_scm[toml]",
     "wheel",
+    "mypy",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -74,3 +75,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 src_paths = ["scripts", "src", "test"]
+
+[tool.mypy]
+mypy_path = "src/stubs/"
+allow_redefinition = true
