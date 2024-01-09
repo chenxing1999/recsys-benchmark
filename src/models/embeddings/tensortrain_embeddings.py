@@ -90,6 +90,7 @@ class TTEmbedding(IEmbedding):
     def cache_populate(self):
         self._tt_emb.cache_populate()
 
+
 # --- Python implemenation
 def reshape_cores(
     tt_p_shapes: List[int],
