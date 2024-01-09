@@ -90,6 +90,10 @@ class TTEmbedding(IEmbedding):
     def cache_populate(self):
         self._tt_emb.cache_populate()
 
+    def get_num_params(self) -> int:
+        parameters = self._tt_emb.get_params()
+        return sum([p.numel() for p in parameters])
+
 
 # --- Python implemenation
 def reshape_cores(
