@@ -6,9 +6,15 @@ model:
     - 400
   p_dropout: 0.5
   embedding_config:
-    name: cerp_retrain
-    bucket_size: 140000
-    checkpoint_weight_dir: checkpoints/cerp/trial/
+    name: tt_emb
+    tt_ranks: [192, 192]
+    # tt_p_shapes: [25, 40, 40, 50]
+    # tt_q_shapes: [2, 2, 2, 2]
+    use_cache: False
+    optimizer: "adam"
+    learning_rate: 0.001
+    sparse: False
+
   use_batchnorm: True
 
 train_dataloader:
@@ -24,7 +30,8 @@ train_dataloader:
 val_dataloader:
   dataset:
     train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    dataset_name: val
+    my_path: dataset/ctr/criteo/criteo-common-split/train.bin
+    dataset_name: train
     dataset_path: dataset/ctr/criteo/train.txt
     cache_path: dataset/ctr/criteo/criteo-fm
   batch_size: 2048
@@ -33,29 +40,19 @@ val_dataloader:
 test_dataloader:
   dataset:
     train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    dataset_name: test
+    dataset_name: val
     dataset_path: dataset/ctr/criteo/train.txt
     cache_path: dataset/ctr/criteo/criteo-fm
   batch_size: 2048
   num_workers: 8
 
-cerp:
-  gamma_init: 0.0001
-  target_sparsity: 0.8
-  # gamma_init: 1
-  gamma_decay: 0.5
-  weight_decay: 0.00001 # not used for deepfm
-  best_checkpoint_dir: checkpoints/cerp/best/
-  trial_checkpoint: checkpoints/cerp/trial/
-  is_retrain: False
-
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint.pth
+checkpoint_path: checkpoints/deepfm-tt.pth
 num_epochs: 15
 log_step: 1000
 
-weight_decay: 0.00001
+weight_decay: 0.000001
 learning_rate: 0.001
 validate_step: 1
 
@@ -88,4 +85,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: original
+  log_name: tt-rec
