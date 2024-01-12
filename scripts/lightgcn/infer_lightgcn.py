@@ -1,5 +1,6 @@
 """Code used to benchmark maximum RAM usage for LightGCN inference"""
 import argparse
+import os
 import time
 from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple, cast
 
@@ -11,6 +12,8 @@ from src.metrics import get_env_metrics
 from src.models import IGraphBaseCore, get_graph_model  # type: ignore
 from src.models.embeddings.pruned_embedding import PrunedEmbedding
 from src.models.lightgcn import LightGCN
+
+CACHE_DATA_PATH = ".cache/data_for_infer_yelp2018.dat"
 
 
 class Timer:
@@ -48,7 +51,8 @@ class Timer:
         return self
 
 
-@torch.no_grad()
+# @torch.no_grad()
+# @profile
 def infer(
     model: IGraphBaseCore,
     norm_adj: torch.Tensor,
@@ -62,7 +66,8 @@ def infer(
 
     timer = Timer()
     start = time.time()
-    user_emb, item_emb = model(norm_adj)
+    with torch.no_grad():
+        user_emb, item_emb = model(norm_adj)
 
     if is_cuda:
         torch.cuda.synchronize()
@@ -72,19 +77,24 @@ def infer(
 
     user_emb = user_emb[user_id]
 
-    # Filter out item already interacted with user
-    ind0: List[i64] = []
-    ind1: List[i64] = []
-    for idx, user in enumerate(user_id):
-        ind0.extend([idx] * len(graph[user]))
-        ind1.extend(graph[user])
-
     scores = user_emb @ item_emb.T
     if is_cuda:
         torch.cuda.synchronize()
     end = time.time()
     timer.matching = end - start
     start = end
+
+    # Filter out item already interacted with user
+    # ind0: List[i64] = []
+    # ind1: List[i64] = []
+    # for idx, user in enumerate(user_id):
+    #     ind0.extend([idx] * len(graph[user]))
+    #     ind1.extend(graph[user])
+    ind0 = torch.tensor([], dtype=torch.long)
+    ind1 = torch.tensor([], dtype=torch.long)
+    for idx, user in enumerate(user_id):
+        ind0 = torch.cat((ind0, torch.tensor([idx] * len(graph[user]))))
+        ind1 = torch.cat((ind1, torch.tensor(graph[user])))
 
     scores[ind0, ind1] = float("-inf")
 
@@ -111,8 +121,21 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         "--task",
         "-t",
         type=int,
-        help="1: Only load data, 2: load model, 3: only load data + model",
+        help="""
+        1: Only load data,
+        2: load data + model,
+        3: do nothing,
+        4: Load model then save to binary
+        0 (default): infer
+        """,
         default=0,
+    )
+    parser.add_argument(
+        "--save-binary-path",
+        "-s",
+        type=str,
+        help="path to binary file to save in task 4",
+        default=None,
     )
     parser.add_argument(
         "--mode",
@@ -120,6 +143,13 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         type=str,
         help="Model loader, support: original, pep",
         default="original",
+    )
+    parser.add_argument(
+        "--n_runs",
+        "-n",
+        type=int,
+        help="Number of runs",
+        default=20,
     )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
@@ -309,7 +339,6 @@ def _load_cerp(config, num_users, num_items, device):
     model.load_state_dict(checkpoint["state_dict"], strict=False)
 
     for emb in [model.item_emb_table, model.user_emb_table]:
-        emb = model.embedding
         emb.sparse_p_weight = emb.p_weight * emb.p_mask
         emb.sparse_q_weight = emb.q_weight * emb.q_mask
 
@@ -325,6 +354,8 @@ def _load_cerp(config, num_users, num_items, device):
 
 def main(argv: Optional[Sequence[str]] = None):
     config, args = get_config(argv)
+    if args.task == 3:
+        return
     train_dataloader_config = config["train_dataloader"]
     train_dataset_config = train_dataloader_config["dataset"]
     train_dataset_path: str = train_dataset_config["path"]
@@ -334,19 +365,34 @@ def main(argv: Optional[Sequence[str]] = None):
     else:
         device = "cpu"
 
-    (
-        norm_adj,
-        graph,
-        num_users,
-        num_items,
-    ) = calculate_sparse_graph_adj_norm(train_dataset_path)
+    if os.path.exists(CACHE_DATA_PATH):
+        (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        ) = torch.load(CACHE_DATA_PATH)
+    else:
+        (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        ) = calculate_sparse_graph_adj_norm(train_dataset_path)
+        dat = (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        )
+        torch.save(dat, CACHE_DATA_PATH)
 
     norm_adj = norm_adj.to(device)
     if args.task == 1:
         print(get_env_metrics())
         return
 
-    if args.mode == "original":
+    if args.mode in ["original", "qr", "dhe", "tt_rec_torch"]:
         model = _load_original(config, num_users, num_items, device)
     elif args.mode == "pep":
         model = _load_pep(config, num_users, num_items, device)
@@ -356,10 +402,16 @@ def main(argv: Optional[Sequence[str]] = None):
         model = _load_optembed(config, num_users, num_items, device)
     elif args.mode == "cerp":
         model = _load_cerp(config, num_users, num_items, device)
+    elif args.mode == "torch":
+        model = torch.load(config["checkpoint_path"])
     else:
         raise ValueError(f"{args.mode=} not supported")
     if args.task == 2:
         print(get_env_metrics())
+        return
+
+    if args.task == 4:
+        torch.save(model, args.save_binary_path)
         return
 
     model.eval()
@@ -373,7 +425,7 @@ def main(argv: Optional[Sequence[str]] = None):
     # Start inference
 
     topk: i64 = 20
-    n_runs: i64 = 20
+    n_runs: i64 = args.n_runs
 
     total_timer = Timer()
     for _ in range(n_runs):
