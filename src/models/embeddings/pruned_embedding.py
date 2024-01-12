@@ -39,14 +39,12 @@ class PrunedEmbedding(IEmbedding):
         num_item, hidden_size = weight.shape
         result = cls(num_item, hidden_size, mode)
 
-        weight = weight.to_sparse_csr()
+        if weight.layout != torch.sparse_csr:
+            weight = weight.to_sparse_csr()
+
         result.values = weight.values().numpy()
-
-        crow_indices = weight.crow_indices()
-        result.crow_indices = crow_indices.numpy()
-
-        col_indices = weight.col_indices()
-        result.col_indices = col_indices.numpy()
+        result.crow_indices = weight.crow_indices().numpy()
+        result.col_indices = weight.col_indices().numpy()
 
         return result
 
@@ -87,6 +85,7 @@ class PrunedEmbedding(IEmbedding):
         else:
             return torch.from_numpy(x)
 
+    # @profile
     def forward(self, x):
         original_shape = x.shape
 
@@ -174,7 +173,18 @@ def csr_embedding_lookup(
         outputs[index][col_indices[i]] = values[i]
 
 
-@numba.jit(nopython=True)
+nb_typehint = numba.void(
+    numba.float32[:],
+    numba.int64[::1],
+    numba.int64[::1],
+    numba.int64[::1],
+    numba.float32[:, :],
+    numba.uint32,
+    numba.uint32,
+)
+
+
+@numba.jit(nb_typehint, nopython=True)
 def csr_embedding_lookup_cpu(
     values,
     crow_indices,

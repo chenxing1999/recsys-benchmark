@@ -13,6 +13,11 @@ from src.utils import set_seed
 
 set_seed(2023)
 
+TEST_CODE = """
+with torch.no_grad():
+    model(inps).cpu()
+"""
+
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -30,7 +35,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     parser.add_argument("--batch_size", "-b", default=64, type=int)
     parser.add_argument(
-        "--run-ranking", action="store_true", help="Run ranking after inference"
+        "--task",
+        "-t",
+        help="Which task to run (infer, load_model, load_data, ranking"
+        ", nothing, timeit)",
+        default="infer",
     )
     parser.add_argument(
         "--run-small-file",
@@ -38,7 +47,17 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Run small file (100 record) in tests/assets instead of full data",
     )
 
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--mode",
+        "-m",
+        default="original",
+        help="Mode to load model weight",
+    )
+
+    args = parser.parse_args(argv)
+    # assert args.mode in MODES
+
+    return args
 
 
 def read_small_file(
@@ -102,6 +121,9 @@ def read_big_file(
             if count == batch_size:
                 break
 
+            if count % 100 == 0:
+                print(f"{count} / {batch_size}")
+
     inps_tensor = torch.stack(inps, dim=0)
     label_tensor = torch.tensor(labels)
     return inps_tensor, label_tensor
@@ -117,8 +139,17 @@ def _load_dhe(checkpoint_path: str):
 
 def _load_pep(checkpoint_path: str):
     """convert pep to pruned version"""
-    model = DeepFM.load(checkpoint_path)
-    model.embedding = PrunedEmbedding.from_other_emb(model.embedding)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    if checkpoint["model_config"]["embedding_config"]["name"] != "pruned-sparse-csr":
+        model = DeepFM.load(checkpoint, strict=False)
+        model.embedding = PrunedEmbedding.from_other_emb(model.embedding)
+        return model
+
+    sparse_w = checkpoint["state_dict"].pop("embedding.sparse_w")
+    model = DeepFM.load(checkpoint, empty_embedding=True)
+    # setattr(model, "embedding", PrunedEmbedding.from_weight(sparse_w))
+    model.register_module("embedding", PrunedEmbedding.from_weight(sparse_w))
     return model
 
 
@@ -165,16 +196,49 @@ def _load_opt_mask_d(
 
 
 def _load_cerp(checkpoint_path):
-    model = DeepFM.load(checkpoint_path)
+    import numpy as np
 
-    emb = model.embedding
-    emb.sparse_p_weight = emb.p_weight * emb.p_mask
-    emb.sparse_q_weight = emb.q_weight * emb.q_mask
+    from src.models.embeddings.cerp_embedding import RetrainCerpEmbedding
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    model = DeepFM.load(checkpoint, empty_embedding=True, strict=False)
+
+    emb_config = checkpoint["model_config"]["embedding_config"]
+
+    bucket_size = emb_config["bucket_size"]
+    emb_config["bucket_size"] = 1
+    emb_config.pop("name")
+    emb = RetrainCerpEmbedding(
+        checkpoint["field_dims"],
+        16,
+        mode=None,
+        field_name="deepfm",
+        **emb_config,
+    )
 
     emb.p_weight = None
     emb.q_weight = None
-    emb.q_mask = None
     emb.p_mask = None
+    emb.q_mask = None
+
+    state = checkpoint["state_dict"]
+    emb.sparse_p_weight = state["embedding.sparse_p_weight"]
+    emb.sparse_q_weight = state["embedding.sparse_q_weight"]
+
+    emb._bucket_size = bucket_size
+    emb.q_entity_per_row = int(np.ceil(emb._num_item / emb._bucket_size))
+    model.embedding = emb
+
+    # model = DeepFM.load(checkpoint_path)
+
+    # emb = model.embedding
+    # emb.sparse_p_weight = emb.p_weight * emb.p_mask
+    # emb.sparse_q_weight = emb.q_weight * emb.q_mask
+
+    # emb.p_weight = None
+    # emb.q_weight = None
+    # emb.q_mask = None
+    # emb.p_mask = None
 
     return model
 
@@ -182,23 +246,41 @@ def _load_cerp(checkpoint_path):
 def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
 
-    # Load checkpoint
-    # model = DeepFM.load(args.checkpoint_path)
-    # model = _load_dhe(args.checkpoint_path)
-    # model = _load_pep(args.checkpoint_path)
-    # model = _load_ttrec(args.checkpoint_path, True)
-    # model = _load_opt_mask_d(
-    #     args.checkpoint_path,
-    #     "checkpoints/deepfm/opt/initial.pth",
-    #     mem_optimized=True,
-    # )
-    model = _load_cerp(args.checkpoint_path)
+    if args.task == "nothing":
+        return
 
-    print("Num params", model.embedding.get_num_params())
     #  Load data
     train_info = torch.load(args.train_info)
+    if args.task == "load_data":
+        return
+
+    # Load checkpoint
+    if args.mode in ["original", "opt-cpu"]:
+        model = torch.load(args.checkpoint_path)
+    elif args.mode in ["original", "qr", "ttrec-cpu", "opt-cpu"]:
+        model = DeepFM.load(args.checkpoint_path)
+    elif args.mode == "cerp":
+        model = _load_cerp(args.checkpoint_path)
+    elif args.mode == "dhe":
+        model = _load_dhe(args.checkpoint_path)
+    elif args.mode in ["pep", "opt-sparse-cpu"]:
+        model = _load_pep(args.checkpoint_path)
+    elif args.mode == "ttrec":
+        model = _load_ttrec(args.checkpoint_path, True)
+    elif args.mode == "opt":
+        model = _load_opt_mask_d(
+            args.checkpoint_path,
+            "checkpoints/deepfm/opt/initial.pth",
+            mem_optimized=False,
+        )
+    else:
+        raise ValueError()
+
+    if args.task == "load_model":
+        return
 
     print("Loading...")
+    print("Num params", model.embedding.get_num_params())
     if args.run_small_file:
         inps, labels = read_small_file(
             "tests/assets/train_criteo_sample.txt",
@@ -241,11 +323,26 @@ def main(argv: Optional[Sequence[str]] = None):
         # wait for data move to gpu
         torch.cuda.synchronize()
 
-    if args.run_ranking:
+    if args.task == "ranking":
         print("--- Ranking ---")
         start = time.time()
         with torch.no_grad():
             model.get_ranks(inps).cpu()
+    elif args.task == "timeit":
+        import timeit
+
+        start = time.time()
+        print(
+            timeit.repeat(
+                TEST_CODE,
+                setup="import torch",
+                globals={"model": model, "inps": inps},
+                number=20,
+            )
+        )
+
+    elif args.task == "track_emission":
+        raise ValueError("Track emission is not supported")
     else:
         print("--- Inference ---")
         start = time.time()

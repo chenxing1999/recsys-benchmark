@@ -46,6 +46,7 @@ class TTEmbedding(IEmbedding):
         self._mode = mode
         self._num_item = num_item
         self._hidden_size = hidden_size
+        self._field_dims = field_dims
 
         logger.debug(f"P Shapes (num_item dim): {self._tt_emb.tt_p_shapes}")
         logger.debug(f"Q Shapes (hidden dim): {self._tt_emb.tt_q_shapes}")
@@ -273,3 +274,18 @@ class TTRecTorch(IEmbedding):
         for core, core_torch in zip(emb._tt_emb.tt_cores, self.tt_cores):
             assert core_torch.data.shape == core.data.shape
             core_torch.data = core.data
+
+    @classmethod
+    def init_from_fbtt_weight(cls, emb: TTEmbedding):
+        tt_ops = emb._tt_emb
+        field_dims = emb._field_dims
+
+        new_emb = cls(
+            field_dims,
+            emb._hidden_size,
+            tt_ops.tt_ranks,
+            tt_p_shapes=tt_ops.tt_p_shapes,
+            tt_q_shapes=tt_ops.tt_q_shapes,
+        )
+        new_emb.copy_weight_from_fbtt_weight(emb)
+        return new_emb
