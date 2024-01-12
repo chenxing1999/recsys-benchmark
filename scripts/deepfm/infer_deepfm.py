@@ -165,7 +165,8 @@ def _load_ttrec(checkpoint_path: str, cache=False):
     model = DeepFM.load(checkpoint, strict=False)
     model.to("cuda")
     if cache:
-        model.embedding._tt_emb.cache_populate()
+        # model.embedding._tt_emb.cache_populate()
+        model.embedding._tt_emb.warmup = False
     return model
 
 
@@ -189,7 +190,6 @@ def _load_opt_mask_d(
     # Remove original weight
     model.embedding._weight.data = torch.empty(0)
 
-    print("Num params", model.embedding.get_num_params())
     if mem_optimized:
         model.embedding = PrunedEmbedding.from_weight(weight)
     return model
@@ -229,6 +229,17 @@ def _load_cerp(checkpoint_path):
     emb.q_entity_per_row = int(np.ceil(emb._num_item / emb._bucket_size))
     model.embedding = emb
 
+    # model = DeepFM.load(checkpoint_path)
+
+    # emb = model.embedding
+    # emb.sparse_p_weight = emb.p_weight * emb.p_mask
+    # emb.sparse_q_weight = emb.q_weight * emb.q_mask
+
+    # emb.p_weight = None
+    # emb.q_weight = None
+    # emb.q_mask = None
+    # emb.p_mask = None
+
     return model
 
 
@@ -238,6 +249,8 @@ def main(argv: Optional[Sequence[str]] = None):
     if args.task == "nothing":
         return
 
+
+    print("Num params", model.embedding.get_num_params())
     #  Load data
     train_info = torch.load(args.train_info)
     if args.task == "load_data":
@@ -290,6 +303,8 @@ def main(argv: Optional[Sequence[str]] = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     model.to(device)
+    model.embedding.sparse_p_weight = model.embedding.sparse_p_weight.to(device)
+    model.embedding.sparse_q_weight = model.embedding.sparse_q_weight.to(device)
     if isinstance(model.embedding, PrunedEmbedding) and device == "cuda":
         model.embedding.to_cuda()
 

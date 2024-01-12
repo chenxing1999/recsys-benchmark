@@ -93,8 +93,12 @@ class AvazuDataset(ICTRDataset):
             feat_mapper = train_test_info["feat_mapper"]
             defaults = train_test_info["defaults"]
 
+        num_feats = self.NUM_FEATS
+        if self._preprocess_timestamp:
+            num_feats = num_feats + 3
+
         with lmdb.open(cache_path, map_size=int(1e11)) as env:
-            field_dims = np.zeros(self.NUM_FEATS, dtype=np.uint32)
+            field_dims = np.zeros(num_feats, dtype=np.uint32)
             for i, fm in feat_mapper.items():
                 field_dims[i - 1] = len(fm) + 1
             with env.begin(write=True) as txn:
@@ -151,7 +155,7 @@ class AvazuDataset(ICTRDataset):
 
                 for i, feat in enumerate(extra_feats):
                     idx = self.NUM_FEATS + 1 + i
-                    np_array[idx] = feat_mapper[idx].get(values[idx + 1], defaults[idx])
+                    np_array[idx] = feat_mapper[idx].get(feat, defaults[idx])
 
                 buffer.append((struct.pack(">I", item_idx), np_array.tobytes()))
                 item_idx += 1

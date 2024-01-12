@@ -5,9 +5,9 @@ model:
     - 400
     - 400
   p_dropout: 0.2
-  embedding_config:
-    name: vanilla
   use_batchnorm: True
+  embedding_config:
+    name: deepfm_optembed
 
 train_dataloader:
   dataset:
@@ -41,15 +41,21 @@ test_dataloader:
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint-avazu.pth
+checkpoint_path: checkpoints/deepfm_checkpoint_opt_avazu.pth
 num_epochs: 15
 log_step: 1000
 
-weight_decay: 0.000001
-learning_rate: 0.001
+weight_decay: 0.00001
+learning_rate: 0.0003
 validate_step: 1
 
 enable_profile: false
+
+# Opt Specific config
+opt_embed:
+  init_weight_path: checkpoints/deepfm/opt/initial.pth
+  t_param_lr: 0.0001
+  alpha: 0.000001
 
 profilers:
   train_profiler:
@@ -78,4 +84,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/avazu
-  log_name: original
+  log_name: opt-embed

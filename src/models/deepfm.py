@@ -118,7 +118,13 @@ class DeepFM(nn.Module):
         field_dims = checkpoint["field_dims"]
 
         model = cls(field_dims, **model_config, empty_embedding=empty_embedding)
-        model.load_state_dict(checkpoint["state_dict"], strict=strict)
+        missing, unexpected = model.load_state_dict(
+            checkpoint["state_dict"], strict=strict
+        )
+        if missing:
+            logger.warning(f"Missing keys: {missing}")
+        if unexpected:
+            logger.warning(f"Unexpected keys: {unexpected}")
         return model
 
 

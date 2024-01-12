@@ -106,6 +106,9 @@ def train_epoch(
         avg = value / (idx + 1)
         loss_dict[metric] = avg
 
+    sparsity, n_params = model.embedding.get_sparsity(True)
+    loss_dict["sparsity"] = sparsity
+    loss_dict["num_params"] = n_params
     return loss_dict
 
 
@@ -274,6 +277,7 @@ def main(argv: Optional[Sequence[str]] = None):
         model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
 
     best_auc = 0
+    prev_sparsity = 0
     num_epochs = config["num_epochs"]
     try:
         for epoch_idx in range(num_epochs):
@@ -319,6 +323,11 @@ def main(argv: Optional[Sequence[str]] = None):
                         "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
+
+                prev_sparsity = sparsity
+                if prev_sparsity - sparsity > 0.5:
+                    logger.info("Sparsity dropped. Stop training")
+                    break
 
     except KeyboardInterrupt:
         pass

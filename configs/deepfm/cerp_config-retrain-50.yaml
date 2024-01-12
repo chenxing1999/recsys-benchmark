@@ -7,7 +7,7 @@ model:
   p_dropout: 0.5
   embedding_config:
     name: cerp_retrain
-    bucket_size: 140000
+    bucket_size: 320000
     checkpoint_weight_dir: checkpoints/cerp/trial/
   use_batchnorm: True
 

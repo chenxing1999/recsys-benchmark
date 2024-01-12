@@ -4,56 +4,50 @@ model:
     - 400
     - 400
     - 400
-  p_dropout: 0.5
-  embedding_config:
-    name: cerp_retrain
-    bucket_size: 140000
-    checkpoint_weight_dir: checkpoints/cerp/trial/
+  p_dropout: 0.2
   use_batchnorm: True
+  embedding_config:
+    name: pep
+    ori_weight_dir: "checkpoints/pep_ori"
+    checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
+    init_threshold: -150
+    sparsity: [0.5, 0.8]
 
 train_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    my_path: dataset/ctr/criteo/criteo-common-split/train.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: train
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
   num_workers: 8
   batch_size: 2048
 
 val_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: val
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
   batch_size: 2048
   num_workers: 8
 
 test_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: test
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    dataset_path: /home/hungt/tmp/train
+    cache_path: dataset/ctr/avazu/avazu-fm
   batch_size: 2048
   num_workers: 8
-
-cerp:
-  gamma_init: 0.0001
-  target_sparsity: 0.8
-  # gamma_init: 1
-  gamma_decay: 0.5
-  weight_decay: 0.00001 # not used for deepfm
-  best_checkpoint_dir: checkpoints/cerp/best/
-  trial_checkpoint: checkpoints/cerp/trial/
-  is_retrain: False
 
 run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
-num_epochs: 15
-log_step: 1000
+num_epochs: 10
+log_step: 2000
 
 weight_decay: 0.00001
 learning_rate: 0.001
@@ -88,4 +82,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: original
+  log_name: original-pep-v5

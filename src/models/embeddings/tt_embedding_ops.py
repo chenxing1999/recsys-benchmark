@@ -572,17 +572,27 @@ class TableBatchedTTEmbeddingBag(torch.nn.Module):
                 )
             )
 
-        n_params: int = get_num_params(
+        n_params_tt_rec: int = get_num_params(
             self.tt_p_shapes,
             self.tt_q_shapes,
             self.tt_ranks,
         )
-        logger.info(f"Num Params: {n_params}")
+
+        logger.info(f"Num Params TTRec: {n_params_tt_rec}")
+        n_param_cache = 0
+        if cache_size <= 0:
+            cache_size = int(0.1 * self.num_embeddings)
+
+        if use_cache:
+            n_param_cache = cache_size * self.embedding_dim
+            logger.info(f"Num Params Cache Size: {n_param_cache}")
+
+        n_params = n_params_tt_rec + n_param_cache
+        logger.info(f"Total params: {n_params}")
+
         self.reset_parameters(weight_dist)
         self.use_cache = use_cache
         if use_cache:
-            if cache_size <= 0:
-                cache_size = int(0.1 * self.num_embeddings)
             if hashtbl_size <= 0:
                 hashtbl_size = self.num_embeddings
             assert hashtbl_size >= cache_size
