@@ -182,10 +182,9 @@ nb_typehint = numba.void(
     numba.uint32,
     numba.uint32,
 )
-@numba.jit(
-    nb_typehint,
-    nopython=True
-)
+
+
+@numba.jit(nb_typehint, nopython=True)
 def csr_embedding_lookup_cpu(
     values,
     crow_indices,

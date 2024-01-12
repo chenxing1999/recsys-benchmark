@@ -109,7 +109,13 @@ class DeepFM(nn.Module):
         return torch.argsort(scores, descending=True)
 
     @classmethod
-    def load(cls, checkpoint: Union[str, Dict[str, Any]], strict=True, *, empty_embedding=False) -> "DeepFM":
+    def load(
+        cls,
+        checkpoint: Union[str, Dict[str, Any]],
+        strict=True,
+        *,
+        empty_embedding=False,
+    ) -> "DeepFM":
         if isinstance(checkpoint, str):
             checkpoint = torch.load(checkpoint, map_location="cpu")
 

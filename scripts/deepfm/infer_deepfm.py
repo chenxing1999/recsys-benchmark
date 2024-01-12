@@ -249,8 +249,6 @@ def main(argv: Optional[Sequence[str]] = None):
     if args.task == "nothing":
         return
 
-
-    print("Num params", model.embedding.get_num_params())
     #  Load data
     train_info = torch.load(args.train_info)
     if args.task == "load_data":
@@ -282,6 +280,7 @@ def main(argv: Optional[Sequence[str]] = None):
         return
 
     print("Loading...")
+    print("Num params", model.embedding.get_num_params())
     if args.run_small_file:
         inps, labels = read_small_file(
             "tests/assets/train_criteo_sample.txt",
