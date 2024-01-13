@@ -148,7 +148,7 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
         "--n_runs",
         "-n",
         type=int,
-        help="Number of runs",
+        help="Number of runs. Defaults: 20",
         default=20,
     )
     args = parser.parse_args(argv)
@@ -310,6 +310,34 @@ def _load_optembed(
     return model
 
 
+def _load_optembed_sparse(
+    config,
+    num_users,
+    num_items,
+    device: str = "cpu",
+):
+    pass
+
+    model_config = config["model"]
+    model = get_graph_model(
+        num_users,
+        num_items,
+        model_config,
+    )
+
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    model.item_emb_table = PrunedEmbedding.from_other_emb(model.item_emb_table)
+    model.user_emb_table = PrunedEmbedding.from_other_emb(model.user_emb_table)
+
+    if device == "cuda":
+        model.item_emb_table.to_cuda()
+        model.user_emb_table.to_cuda()
+
+    return model
+
+
 def _load_original(config, num_users, num_items, device):
     model_config = config["model"]
     model = get_graph_model(
@@ -385,6 +413,7 @@ def main(argv: Optional[Sequence[str]] = None):
             num_users,
             num_items,
         )
+        os.makedirs(os.path.dirname(CACHE_DATA_PATH), exist_ok=True)
         torch.save(dat, CACHE_DATA_PATH)
 
     norm_adj = norm_adj.to(device)
@@ -400,6 +429,8 @@ def main(argv: Optional[Sequence[str]] = None):
         model = _load_ttrec(config, num_users, num_items, device)
     elif args.mode == "optemb":
         model = _load_optembed(config, num_users, num_items, device)
+    elif args.mode == "optemb_sparse":
+        model = _load_optembed_sparse(config, num_users, num_items, device)
     elif args.mode == "cerp":
         model = _load_cerp(config, num_users, num_items, device)
     elif args.mode == "torch":
