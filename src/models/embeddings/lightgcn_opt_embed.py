@@ -239,7 +239,9 @@ def _generate_lightgcn_candidate(
         return candidate
     cur_sparsity = _get_sparsity(candidate, hidden_size)
     step = 1.05
+    count = 0
     while cur_sparsity < target_sparsity:
+        count += 1
         candidate = LightGCNCandidate(
             user_mask=_sampling_by_weight(
                 target_sparsity * step, hidden_size, num_user, method
@@ -249,6 +251,8 @@ def _generate_lightgcn_candidate(
             ),
         )
         cur_sparsity = _get_sparsity(candidate, hidden_size)
+        if count % 100 == 0:
+            print(count, cur_sparsity)
     return candidate
 
 

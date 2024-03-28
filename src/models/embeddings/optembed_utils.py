@@ -106,13 +106,14 @@ class _MaskEmbeddingModule(nn.Module):
         return emb
 
 
-@lru_cache(1)
+@lru_cache(2)
 def _find_alpha(
     target_sparsity: float,
     hidden_size: int,
     step=0.1,
     eps=1e-6,
-    num_step=100,
+    # num_step=100,
+    num_step=100000,
 ):
     """Find alpha based on target sparsity and hidden size using gradient descend"""
     if target_sparsity == 0.7 and hidden_size == 64:

@@ -332,3 +332,121 @@ def train_epoch_optembed(
     loss_dict["sparsity"] = sparsity
     loss_dict["n_params"] = n_params
     return loss_dict
+
+
+def train_epoch_pep(
+    dataloader: DataLoader,
+    model: IGraphBaseCore,
+    optimizer,
+    device="cuda",
+    log_step=10,
+    weight_decay=0,
+    profiler=None,
+    info_nce_weight=0,
+    target_sparsity=0,
+) -> Dict[str, float]:
+    """
+    Args:
+
+
+    Returns: Dict contains following keys:
+        loss
+        reg_loss
+        rec_loss
+        cl_loss
+    """
+    from src.models.lightgcn import get_sparsity_and_param
+
+    train_dataset = cast(CFGraphDataset, dataloader.dataset)
+    adj = train_dataset.get_norm_adj()
+
+    model.train()
+    model.to(device)
+    adj = adj.to(device)
+
+    num_sample = 0
+
+    loss_dict: Dict[str, float] = dict(
+        loss=0,
+        reg_loss=0,
+        rec_loss=0,
+        cl_loss=0,
+    )
+    for idx, batch in enumerate(dataloader):
+        users, pos_items, neg_items = batch
+        all_user_emb, all_item_emb = model(adj)
+
+        users = users.to(device)
+        pos_items = pos_items.to(device)
+        neg_items = neg_items.to(device)
+
+        user_embs = torch.index_select(all_user_emb, 0, users)
+        pos_embs = torch.index_select(all_item_emb, 0, pos_items)
+        neg_embs = torch.index_select(all_item_emb, 0, neg_items)
+
+        rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
+
+        reg_loss: torch.Tensor = torch.tensor(0)
+        if weight_decay > 0:
+            reg_loss = model.get_reg_loss(users, pos_items, neg_items)
+            loss_dict["reg_loss"] += reg_loss.item()
+
+        # Enable SGL-Without Augmentation for faster converge
+        info_nce_loss: torch.Tensor = torch.tensor(0)
+        if info_nce_weight > 0:
+            temperature = 0.2
+
+            tmp_user_idx = torch.unique(users)
+            tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
+
+            tmp_pos_idx = torch.unique(pos_items)
+            tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
+            view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
+
+            info_nce_loss = info_nce(view1, view1, temperature)
+
+            info_nce_loss = info_nce_loss * info_nce_weight
+            loss_dict["cl_loss"] += info_nce_loss.item()
+
+        loss = rec_loss + weight_decay * reg_loss + info_nce_loss
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        loss_dict["loss"] += loss.item()
+        loss_dict["rec_loss"] += rec_loss.item()
+
+        num_sample += users.shape[0]
+
+        # Logging
+        if log_step and idx % log_step == 0:
+            msg = f"Idx: {idx}"
+
+            sparsity, num_params = get_sparsity_and_param(model)
+            msg += f" - sparsity: {sparsity:.2f} - num_params: {num_params}"
+
+            loss_dict["sparsity"] = sparsity
+            loss_dict["num_params"] = num_params
+            for metric, value in loss_dict.items():
+                if metric in ["sparsity", "num_params"]:
+                    continue
+                if value > 0:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.2}"
+
+            logger.info(msg)
+            if sparsity > target_sparsity:
+                logger.info("Found target sparsity")
+                break
+
+        if profiler:
+            profiler.step()
+
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        if metric in ["sparsity", "num_params"]:
+            continue
+        loss_dict[metric] = avg
+
+    return loss_dict

@@ -19,7 +19,7 @@ from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
 from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
 from src.models.lightgcn import get_sparsity_and_param, save_lightgcn_emb_checkpoint
-from src.trainer.lightgcn import train_epoch, validate_epoch
+from src.trainer.lightgcn import train_epoch_pep, validate_epoch
 from src.utils import set_seed
 
 set_seed(2023)
@@ -230,12 +230,18 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
 
         return
 
+    model_weight_decay = 0
+    use_warmup = config["pep_config"].get("use_warmup", False)
+    if not use_warmup:
+        model_weight_decay = config["pep_config"].get("model_weight_decay", 0)
+
     ps = [
         # threshold
         {"params": [], "weight_decay": config["pep_config"]["weight_decay"]},
         # non-threshold
         {
             "params": [],
+            "weight_decay": model_weight_decay,
         },
     ]
     for name, p in model.named_parameters():
@@ -286,8 +292,13 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
     num_users = train_dataset.num_users
     num_items = train_dataset.num_items
     for epoch_idx in range(num_epochs):
+        if epoch_idx == 5 and config["pep_config"].get("use_warmup", False):
+            optimizer.param_groups[1]["weight_decay"] = config["pep_config"].get(
+                "model_weight_decay", 0
+            )
+
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
-        train_metrics = train_epoch(
+        train_metrics = train_epoch_pep(
             train_dataloader,
             model,
             optimizer,
@@ -296,6 +307,7 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
             config["weight_decay"],
             train_prof,
             info_nce_weight=config["info_nce_weight"],
+            target_sparsity=target_sparsity,
         )
 
         train_metrics.update(metrics.get_env_metrics())
