@@ -25,6 +25,7 @@ NAME_TO_CLS = {
     "optembed": OptEmbed,
     "optembed_retrain": RetrainOptEmbed,
     "deepfm_optembed": DeepFMOptEmbed,
+    "deepfm_optembed_d": DeepFMOptEmbed,
     "deepfm_optembed_retrain": DeepFMRetrainOptEmbed,
     "tt_emb": TTEmbedding,
     "tt_emb_torch": TTRecTorch,
@@ -59,7 +60,7 @@ def get_embedding(
     else:
         if name.startswith("pep") or name.startswith("cerp"):
             embedding_config["field_name"] = field_name
-        if name == "optembed_d" or name == "optembed_d_retrain":
+        if name in ["optembed_d", "optembed_d_retrain", "deepfm_optembed_d"]:
             embedding_config["t_init"] = None
             logger.debug("OptEmbed Mask E is disabled before creating")
 

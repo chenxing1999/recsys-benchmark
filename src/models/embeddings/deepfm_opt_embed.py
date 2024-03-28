@@ -152,6 +152,8 @@ class OptEmbed(IOptEmbed):
         emb = self._mask_e_module(self._weight)
 
         if not self.training and mask_d is None:
+            if self._cur_weight is None:
+                self._cur_weight = torch.empty(1, device=device)
             self._cur_weight.data = emb
             return self._cur_weight
 
@@ -232,7 +234,7 @@ class OptEmbed(IOptEmbed):
                 return emb.mean(1)
 
         # Evaluation forward logic
-        if nn.parameter.is_lazy(self._cur_weight):
+        if nn.parameter.is_lazy(self._cur_weight) or self._cur_weight is None:
             self.get_weight(mask_d)
 
         if self._mode is None:
