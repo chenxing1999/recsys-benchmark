@@ -87,6 +87,9 @@ class TTEmbedding(IEmbedding):
             results = results.reshape(b, n, self._hidden_size)
         return results
 
+    def cache_populate(self):
+        self._tt_emb.cache_populate()
+
 
 # --- Python implemenation
 def reshape_cores(
