@@ -117,6 +117,7 @@ def main(argv: Optional[Sequence[str]] = None):
         model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
         logger.info(f"Num params: {model.embedding.get_num_params()}")
 
+    is_ttrec = "tt_emb" == config["model"]["embedding_config"]["name"]
     if config["run_test"]:
         checkpoint = torch.load(config["checkpoint_path"])
         model.load_state_dict(checkpoint["state_dict"], False)
@@ -153,6 +154,8 @@ def main(argv: Optional[Sequence[str]] = None):
     start = time.time()
     try:
         for epoch_idx in range(num_epochs):
+            if is_ttrec and epoch_idx == 1:
+                model.embedding.cache_populate()
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
             train_metrics = train_epoch(
                 train_dataloader,

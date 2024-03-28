@@ -88,8 +88,6 @@ def main(argv: Optional[Sequence[str]] = None):
     )
 
     logger.info("Successfully load val dataset")
-    checkpoint_path = config["checkpoint_path"]
-    model = DeepFM.load(checkpoint_path)
     if torch.cuda.is_available():
         device = "cuda"
     else:
@@ -97,8 +95,11 @@ def main(argv: Optional[Sequence[str]] = None):
 
     # Load checkpoint
     checkpoint_path = config["checkpoint_path"]
-    model = DeepFM.load(checkpoint_path)
+    model = DeepFM.load(checkpoint_path, strict=False)
     model.to(device)
+
+    # Uncomment line below for TTRec with Cache
+    # model.embedding._tt_emb.warmup = False
     if prune_ratio > 0:
         state = prune(model.embedding.state_dict(), prune_ratio)
         model.embedding.load_state_dict(state)
