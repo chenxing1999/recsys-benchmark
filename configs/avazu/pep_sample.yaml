@@ -11,7 +11,7 @@ model:
     ori_weight_dir: "checkpoints/pep_ori"
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
     init_threshold: -150
-    sparsity: [0.5, 0.8]
+    sparsity: [0.5, 0.8, 0.95]
 
 train_dataloader:
   dataset:
@@ -47,7 +47,7 @@ run_test: false
 
 checkpoint_path: checkpoints/deepfm_checkpoint.pth
 num_epochs: 10
-log_step: 2000
+log_step: 100
 
 weight_decay: 0.00001
 learning_rate: 0.001

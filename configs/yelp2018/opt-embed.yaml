@@ -29,7 +29,7 @@ test_dataloader:
 
 run_test: false
 
-checkpoint_path: checkpoints/checkpoint.pth
+checkpoint_path: checkpoints/opt-super-train.pth
 num_epochs: 100 # num_epochs set high here for model to train more submodel
 log_step: 100
 

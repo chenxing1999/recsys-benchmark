@@ -39,7 +39,7 @@ test_dataloader:
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint_opt.pth
+checkpoint_path: checkpoints/deepfm/deepfm_checkpoint_opt.pth
 num_epochs: 15
 log_step: 1000
 
