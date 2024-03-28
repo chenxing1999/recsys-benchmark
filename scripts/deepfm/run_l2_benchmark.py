@@ -112,6 +112,9 @@ def main(argv: Optional[Sequence[str]] = None):
     num_params = sum(torch.nonzero(p).size(0) for p in model.parameters())
     logger.info(f"Num Params: {num_params}")
 
+    num_params = sum(torch.nonzero(p).size(0) for p in model.embedding.parameters())
+    logger.info(f"Num Emb Params: {num_params}")
+
     if output_path is not None and prune_ratio > 0:
         checkpoint = torch.load(checkpoint_path)
         checkpoint["state_dict"] = state

@@ -48,6 +48,7 @@ class DHEmbedding(IEmbedding):
                 (prime number precomputed that are larger than 1e6)
 
             cache_path: Path to hashed value initialization
+                Note: not supported for LightGCN / multiple embedding tables currently
 
             compute_v2:
                 Run embedding -> Unique -> DHE -> Reverse Unique -> result

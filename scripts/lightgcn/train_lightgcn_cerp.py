@@ -184,12 +184,15 @@ def _main(trial, base_config):
         return
 
     weight_decay_threshold = config["cerp"]["weight_decay"]
+    weight_decay_model = config["cerp"].get(
+        "model_weight_decay", weight_decay_threshold
+    )
     params = [
         # threshold
         {"weight_decay": weight_decay_threshold, "params": []},
         # normal weight
         # {"weight_decay": 0, "params": []},
-        {"weight_decay": weight_decay_threshold, "params": []},
+        {"weight_decay": weight_decay_model, "params": []},
     ]
     for name, p in model.named_parameters():
         if "threshold" in name:
