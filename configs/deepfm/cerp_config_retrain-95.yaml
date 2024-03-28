@@ -4,10 +4,12 @@ model:
     - 400
     - 400
     - 400
-  p_dropout: 0.2
-  use_batchnorm: True
+  p_dropout: 0.5
   embedding_config:
-    name: deepfm_optembed
+    name: cerp_retrain
+    bucket_size: 140000
+    checkpoint_weight_dir: checkpoints/cerp/trial/
+  use_batchnorm: True
 
 train_dataloader:
   dataset:
@@ -25,7 +27,7 @@ val_dataloader:
     dataset_name: val
     dataset_path: dataset/ctr/criteo/train.txt
     cache_path: dataset/ctr/criteo/criteo-fm
-  batch_size: 8192
+  batch_size: 2048
   num_workers: 8
 
 test_dataloader:
@@ -37,23 +39,27 @@ test_dataloader:
   batch_size: 2048
   num_workers: 8
 
+cerp:
+  gamma_init: 0.0001
+  target_sparsity: 0.8
+  # gamma_init: 1
+  gamma_decay: 0.5
+  weight_decay: 0.00001 # not used for deepfm
+  best_checkpoint_dir: checkpoints/cerp/best/
+  trial_checkpoint: checkpoints/cerp/trial/
+  is_retrain: False
+
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint_opt.pth
+checkpoint_path: checkpoints/cerp-95-criteo.pth 
 num_epochs: 15
 log_step: 1000
 
-weight_decay: 0.001
-learning_rate: 0.00003
+weight_decay: 0.00001
+learning_rate: 0.001
 validate_step: 1
 
 enable_profile: false
-
-# Opt Specific config
-opt_embed:
-  init_weight_path: checkpoints/deepfm/opt/initial.pth
-  t_param_lr: 0.0001
-  alpha: 0.0001
 
 profilers:
   train_profiler:
@@ -82,4 +88,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: opt-embed
+  log_name: original

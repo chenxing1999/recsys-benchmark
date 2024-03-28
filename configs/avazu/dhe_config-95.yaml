@@ -4,56 +4,55 @@ model:
     - 400
     - 400
     - 400
-  p_dropout: 0.2
-  use_batchnorm: True
+  p_dropout: 0.5
   embedding_config:
-    name: deepfm_optembed
+    name: dhe
+    hidden_sizes: [896, 896, 896, 896]
+    cache_path: .cache/dhe-init-avazu-80.pth
+    compute_v2: True
+  use_batchnorm: True
 
 train_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
-    my_path: dataset/ctr/criteo/criteo-common-split/train.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: train
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    dataset_path: dataset/ctr/avazu/train
+    cache_path: dataset/ctr/avazu/avazu-fm
   num_workers: 8
   batch_size: 2048
 
 val_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: val
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
-  batch_size: 8192
+    dataset_path: dataset/ctr/avazu/train
+    cache_path: dataset/ctr/avazu/avazu-fm
+  batch_size: 2048
   num_workers: 8
 
 test_dataloader:
   dataset:
-    train_test_info: dataset/ctr/criteo/criteo-common-split/train_test_val_info.bin
+    name: avazu_fm
+    train_test_info: dataset/ctr/avazu/train_test_info.bin
     dataset_name: test
-    dataset_path: dataset/ctr/criteo/train.txt
-    cache_path: dataset/ctr/criteo/criteo-fm
+    dataset_path: dataset/ctr/avazu/train
+    cache_path: dataset/ctr/avazu/avazu-fm
   batch_size: 2048
   num_workers: 8
 
 run_test: false
 
-checkpoint_path: checkpoints/deepfm_checkpoint_opt.pth
+checkpoint_path: checkpoints/dhe-avazu-95.pth
 num_epochs: 15
 log_step: 1000
 
-weight_decay: 0.001
-learning_rate: 0.00003
+weight_decay: 0.000001
+learning_rate: 0.001
 validate_step: 1
 
 enable_profile: false
-
-# Opt Specific config
-opt_embed:
-  init_weight_path: checkpoints/deepfm/opt/initial.pth
-  t_param_lr: 0.0001
-  alpha: 0.0001
 
 profilers:
   train_profiler:
@@ -82,4 +81,4 @@ profilers:
 logger:
   level: INFO
   log_folder: logs/deepfm
-  log_name: opt-embed
+  log_name: dhe-ori

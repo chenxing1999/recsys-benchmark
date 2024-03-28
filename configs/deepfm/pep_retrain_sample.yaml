@@ -10,7 +10,7 @@ model:
     name: pep_retrain
     ori_weight_dir: "checkpoints/deepfm/pep/initial.pth"
     checkpoint_weight_dir: "checkpoints/deepfm/pep/"
-    sparsity: 0.8
+    sparsity: 0.95
 
 train_dataloader:
   dataset:
