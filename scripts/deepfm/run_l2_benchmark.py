@@ -98,11 +98,12 @@ def main(argv: Optional[Sequence[str]] = None):
     model = DeepFM.load(checkpoint_path, strict=False)
     model.to(device)
 
-    # Uncomment line below for TTRec with Cache
-    # model.embedding._tt_emb.warmup = False
     if prune_ratio > 0:
         state = prune(model.embedding.state_dict(), prune_ratio)
         model.embedding.load_state_dict(state)
+
+    # uncomment this for TTRec
+    # model.embedding._tt_emb.warmup = False
 
     val_metrics = validate_epoch(val_dataloader, model, device)
     for key, value in val_metrics.items():

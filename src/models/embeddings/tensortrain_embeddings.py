@@ -46,6 +46,7 @@ class TTEmbedding(IEmbedding):
         self._mode = mode
         self._num_item = num_item
         self._hidden_size = hidden_size
+        self._field_dims = field_dims
 
         logger.debug(f"P Shapes (num_item dim): {self._tt_emb.tt_p_shapes}")
         logger.debug(f"Q Shapes (hidden dim): {self._tt_emb.tt_q_shapes}")
@@ -89,6 +90,10 @@ class TTEmbedding(IEmbedding):
 
     def cache_populate(self):
         self._tt_emb.cache_populate()
+
+    def get_num_params(self) -> int:
+        parameters = self._tt_emb.get_params()
+        return sum([p.numel() for p in parameters])
 
 
 # --- Python implemenation
@@ -255,16 +260,32 @@ class TTRecTorch(IEmbedding):
         )[: self.num_embeddings, : self.embedding_dim]
 
     def forward(self, x):
+        flatten_ind = x.flatten()
         return tt_rec_torch_forward(
-            x,
+            flatten_ind,
             self.tt_p_shapes,
             self.tt_q_shapes,
             self.tt_ranks,
             self.tt_cores,
-        )
+        ).reshape(*x.shape, self.embedding_dim)
 
     def copy_weight_fbtt_weight(self, emb: TTEmbedding):
         """Copy weight from the original implementation"""
         for core, core_torch in zip(emb._tt_emb.tt_cores, self.tt_cores):
             assert core_torch.data.shape == core.data.shape
             core_torch.data = core.data
+
+    @classmethod
+    def init_from_fbtt_weight(cls, emb: TTEmbedding):
+        tt_ops = emb._tt_emb
+        field_dims = emb._field_dims
+
+        new_emb = cls(
+            field_dims,
+            emb._hidden_size,
+            tt_ops.tt_ranks,
+            tt_p_shapes=tt_ops.tt_p_shapes,
+            tt_q_shapes=tt_ops.tt_q_shapes,
+        )
+        new_emb.copy_weight_from_fbtt_weight(emb)
+        return new_emb

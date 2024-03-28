@@ -107,6 +107,7 @@ def main(argv: Optional[Sequence[str]] = None):
     else:
         device = "cpu"
 
+    is_tt_rec_and_cache = False
     if "deepfm_optembed_retrain" in config["model"]["embedding_config"]["name"]:
         logger.info("DeepFM OptEmbed Retrain detected")
         init_weight_path = config["opt_embed"]["init_weight_path"]
@@ -116,6 +117,11 @@ def main(argv: Optional[Sequence[str]] = None):
         assert len(keys[0]) == 0, f"There are some keys missing: {keys[0]}"
         model.embedding.init_mask(mask_d=mask["mask_d"], mask_e=mask["mask_e"])
         logger.info(f"Num params: {model.embedding.get_num_params()}")
+    elif "tt_emb" == config["model"]["embedding_config"]["name"]:
+        logger.info("TT Rec Cache")
+        is_tt_rec_and_cache = config["model"]["embedding_config"].get(
+            "use_cache", False
+        )
 
     is_ttrec = "tt_emb" == config["model"]["embedding_config"]["name"]
     if config["run_test"]:
@@ -157,6 +163,9 @@ def main(argv: Optional[Sequence[str]] = None):
             if is_ttrec and epoch_idx == 1:
                 model.embedding.cache_populate()
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
+            if epoch_idx == 1 and is_tt_rec_and_cache:
+                model.embedding.cache_populate()
+
             train_metrics = train_epoch(
                 train_dataloader,
                 model,

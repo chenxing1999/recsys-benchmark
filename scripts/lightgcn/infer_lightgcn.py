@@ -1,33 +1,39 @@
 """Code used to benchmark maximum RAM usage for LightGCN inference"""
 import argparse
-import datetime
-from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
+import os
+import time
+from typing import Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple, cast
 
 import torch
 import yaml  # type: ignore
 from mypy_extensions import i64
 
+from src.metrics import get_env_metrics
 from src.models import IGraphBaseCore, get_graph_model  # type: ignore
+from src.models.embeddings.pruned_embedding import PrunedEmbedding
+from src.models.lightgcn import LightGCN
+
+CACHE_DATA_PATH = ".cache/data_for_infer_yelp2018.dat"
 
 
 class Timer:
-    forward: datetime.timedelta
-    matching: datetime.timedelta
-    filter_time: datetime.timedelta
-    topk: datetime.timedelta
+    forward: float
+    matching: float
+    filter_time: float
+    topk: float
 
     def __init__(self):
-        self.forward = datetime.timedelta()
-        self.matching = datetime.timedelta()
-        self.filter_time = datetime.timedelta()
-        self.topk = datetime.timedelta()
+        self.forward = 0.0
+        self.matching = 0.0
+        self.filter_time = 0.0
+        self.topk = 0.0
 
     def __repr__(self):
         return (
-            f"forward={self.forward}ms\n"
-            f"- matching={self.matching}ms\n"
-            f"- filter_time={self.filter_time}ms\n"
-            f"- topk={self.topk}ms"
+            f"forward={self.forward * 1e3:.3f} ms\n"
+            f"- matching={self.matching * 1e3:.3f} ms\n"
+            f"- filter_time={self.filter_time * 1e3:.3f} ms\n"
+            f"- topk={self.topk * 1e3:.3f} ms"
         )
 
     def merge(self, other: "Timer") -> "Timer":
@@ -45,7 +51,8 @@ class Timer:
         return self
 
 
-@torch.no_grad()
+# @torch.no_grad()
+# @profile
 def infer(
     model: IGraphBaseCore,
     norm_adj: torch.Tensor,
@@ -58,43 +65,49 @@ def infer(
         torch.cuda.synchronize()
 
     timer = Timer()
-    start = datetime.datetime.now()
-    user_emb, item_emb = model(norm_adj)
+    start = time.time()
+    with torch.no_grad():
+        user_emb, item_emb = model(norm_adj)
 
     if is_cuda:
         torch.cuda.synchronize()
-    end = datetime.datetime.now()
+    end = time.time()
     timer.forward = end - start
     start = end
 
     user_emb = user_emb[user_id]
 
-    # Filter out item already interacted with user
-    ind0: List[i64] = []
-    ind1: List[i64] = []
-    for idx, user in enumerate(user_id):
-        ind0.extend([idx] * len(graph[user]))
-        ind1.extend(graph[user])
-
     scores = user_emb @ item_emb.T
     if is_cuda:
         torch.cuda.synchronize()
-    end = datetime.datetime.now()
+    end = time.time()
     timer.matching = end - start
     start = end
+
+    # Filter out item already interacted with user
+    # ind0: List[i64] = []
+    # ind1: List[i64] = []
+    # for idx, user in enumerate(user_id):
+    #     ind0.extend([idx] * len(graph[user]))
+    #     ind1.extend(graph[user])
+    ind0 = torch.tensor([], dtype=torch.long)
+    ind1 = torch.tensor([], dtype=torch.long)
+    for idx, user in enumerate(user_id):
+        ind0 = torch.cat((ind0, torch.tensor([idx] * len(graph[user]))))
+        ind1 = torch.cat((ind1, torch.tensor(graph[user])))
 
     scores[ind0, ind1] = float("-inf")
 
     if is_cuda:
         torch.cuda.synchronize()
-    end = datetime.datetime.now()
+    end = time.time()
     timer.filter_time = end - start
     start = end
 
     y_pred = torch.topk(scores, k, dim=1)
     if is_cuda:
         torch.cuda.synchronize()
-    end = datetime.datetime.now()
+    end = time.time()
     timer.topk = end - start
     start = end
 
@@ -105,10 +118,38 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     parser.add_argument(
-        "--mode",
+        "--task",
+        "-t",
         type=int,
-        help="1: Only load data, 2: Only load model, 3: only load data + model",
+        help="""
+        1: Only load data,
+        2: load data + model,
+        3: do nothing,
+        4: Load model then save to binary
+        0 (default): infer
+        """,
         default=0,
+    )
+    parser.add_argument(
+        "--save-binary-path",
+        "-s",
+        type=str,
+        help="path to binary file to save in task 4",
+        default=None,
+    )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        type=str,
+        help="Model loader, support: original, pep",
+        default="original",
+    )
+    parser.add_argument(
+        "--n_runs",
+        "-n",
+        type=int,
+        help="Number of runs",
+        default=20,
     )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
@@ -180,22 +221,42 @@ def calculate_sparse_graph_adj_norm(
     return norm_adj, graph, num_user, num_item
 
 
-def main(argv: Optional[Sequence[str]] = None):
-    config, args = get_config(argv)
-    train_dataloader_config = config["train_dataloader"]
-    train_dataset_config = train_dataloader_config["dataset"]
-    train_dataset_path: str = train_dataset_config["path"]
+def _load_pep(
+    config,
+    num_users,
+    num_items,
+    device: str = "cpu",
+):
+    model_config = config["model"]
+    model = get_graph_model(
+        num_users,
+        num_items,
+        model_config,
+    )
+    model = cast(LightGCN, model)
 
-    if args.mode != 2:
-        (
-            norm_adj,
-            graph,
-            num_users,
-            num_items,
-        ) = calculate_sparse_graph_adj_norm(train_dataset_path)
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
 
-    if args.mode == 1:
-        return
+    model.item_emb_table = PrunedEmbedding.from_other_emb(model.item_emb_table)
+    model.user_emb_table = PrunedEmbedding.from_other_emb(model.user_emb_table)
+
+    if device == "cuda":
+        model.item_emb_table.to_cuda()
+        model.user_emb_table.to_cuda()
+    return model
+
+
+def _load_ttrec(
+    config,
+    num_users,
+    num_items,
+    device: str = "cpu",
+    cache=False,
+):
+    """Utility to load TTRec checkpoint with cache or not"""
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+    config["model"]["embedding_config"]["use_cache"] = cache
 
     model_config = config["model"]
     model = get_graph_model(
@@ -204,19 +265,158 @@ def main(argv: Optional[Sequence[str]] = None):
         model_config,
     )
 
+    if not cache:
+        for k in ["item_emb_table", "user_emb_table"]:
+            checkpoint["state_dict"].pop(f"{k}._tt_emb.hashtbl")
+            checkpoint["state_dict"].pop(f"{k}._tt_emb.cache_state")
+
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    # if cache:
+    #     model.embedding._tt_emb.cache_populate()
+    return model
+
+
+def _load_optembed(
+    config,
+    num_users,
+    num_items,
+    device: str = "cpu",
+):
+    from src.models.embeddings.lightgcn_opt_embed import RetrainOptEmbed
+
+    model_config = config["model"]
+    model = get_graph_model(
+        num_users,
+        num_items,
+        model_config,
+    )
+
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    embs = [model.item_emb_table, model.user_emb_table]
+    embs = cast(List[RetrainOptEmbed], embs)
+
+    for emb in embs:
+        emb._cur_weight = emb._weight * emb._mask
+        emb._cur_weight = emb._cur_weight.to(device)
+        emb._full_mask_d = None  # type: ignore
+        emb._mask = None  # type: ignore
+        emb._weight = None  # type: ignore
+
+    model.to(device)
+
+    return model
+
+
+def _load_original(config, num_users, num_items, device):
+    model_config = config["model"]
+    model = get_graph_model(
+        num_users,
+        num_items,
+        model_config,
+    )
+
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    # TODO: Add code for warmup / prepare if neccessary
+    model.to(device)
+    return model
+
+
+def _load_cerp(config, num_users, num_items, device):
+    model_config = config["model"]
+    model = get_graph_model(
+        num_users,
+        num_items,
+        model_config,
+    )
+
+    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
+
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
+    for emb in [model.item_emb_table, model.user_emb_table]:
+        emb.sparse_p_weight = emb.p_weight * emb.p_mask
+        emb.sparse_q_weight = emb.q_weight * emb.q_mask
+
+        emb.p_weight = None
+        emb.q_weight = None
+        emb.q_mask = None
+        emb.p_mask = None
+
+    model.to(device)
+
+    return model
+
+
+def main(argv: Optional[Sequence[str]] = None):
+    config, args = get_config(argv)
+    if args.task == 3:
+        return
+    train_dataloader_config = config["train_dataloader"]
+    train_dataset_config = train_dataloader_config["dataset"]
+    train_dataset_path: str = train_dataset_config["path"]
+
     if torch.cuda.is_available():
         device = "cuda"
     else:
         device = "cpu"
 
-    checkpoint = torch.load(config["checkpoint_path"], map_location="cpu")
-    model.load_state_dict(checkpoint["state_dict"], strict=False)
-    if args.mode in [2, 3]:
+    if os.path.exists(CACHE_DATA_PATH):
+        (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        ) = torch.load(CACHE_DATA_PATH)
+    else:
+        (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        ) = calculate_sparse_graph_adj_norm(train_dataset_path)
+        dat = (
+            norm_adj,
+            graph,
+            num_users,
+            num_items,
+        )
+        torch.save(dat, CACHE_DATA_PATH)
+
+    norm_adj = norm_adj.to(device)
+    if args.task == 1:
+        print(get_env_metrics())
         return
 
-    # TODO: Add code for warmup / prepare if neccessary
-    model.to(device)
-    norm_adj = norm_adj.to(device)
+    if args.mode in ["original", "qr", "dhe", "tt_rec_torch"]:
+        model = _load_original(config, num_users, num_items, device)
+    elif args.mode == "pep":
+        model = _load_pep(config, num_users, num_items, device)
+    elif args.mode == "ttrec":
+        model = _load_ttrec(config, num_users, num_items, device)
+    elif args.mode == "optemb":
+        model = _load_optembed(config, num_users, num_items, device)
+    elif args.mode == "cerp":
+        model = _load_cerp(config, num_users, num_items, device)
+    elif args.mode == "torch":
+        model = torch.load(config["checkpoint_path"])
+    else:
+        raise ValueError(f"{args.mode=} not supported")
+    if args.task == 2:
+        print(get_env_metrics())
+        return
+
+    if args.task == 4:
+        torch.save(model, args.save_binary_path)
+        return
+
+    model.eval()
+    with torch.no_grad():
+        model(norm_adj)[0].cpu()
 
     user_id: List[i64] = list(range(1))
     results, timer = infer(model, norm_adj, user_id, graph, 5)
@@ -225,18 +425,19 @@ def main(argv: Optional[Sequence[str]] = None):
     # Start inference
 
     topk: i64 = 20
-    n_runs: i64 = 20
+    n_runs: i64 = args.n_runs
 
     total_timer = Timer()
     for _ in range(n_runs):
         results, timer = infer(model, norm_adj, user_id, graph, topk)
         total_timer.merge(timer)
+
+    print("Timer run")
     print(total_timer.avg(n_runs))
+
+    print("Env Metric")
+    print(get_env_metrics())
 
 
 if __name__ == "__main__":
-    import os
-
-    print(os.getpid())
     main()
-    # tracemalloc.stop()
