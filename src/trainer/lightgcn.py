@@ -1,5 +1,5 @@
 """Define training and evaluating logic for LightGCN"""
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
 
 import torch
 from loguru import logger
@@ -75,7 +75,7 @@ class GraphTrainer(ICFTrainer):
     def model(self):
         return self._model
 
-    def train_epoch(self, dataloader) -> Dict[str, float]:
+    def train_epoch(self, dataloader, epoch_idx: int) -> Dict[str, float]:
         return train_epoch(
             dataloader,
             self.model,
@@ -89,7 +89,7 @@ class GraphTrainer(ICFTrainer):
 
     def validate_epoch(
         self,
-        train_dataset,
+        train_dataset: CFGraphDataset,
         dataloader,
         metrics: Optional[List[str]] = None,
     ) -> Dict[str, float]:
@@ -138,51 +138,15 @@ def train_epoch(
         cl_loss=0,
     )
     for idx, batch in enumerate(dataloader):
-        users, pos_items, neg_items = batch
-        all_user_emb, all_item_emb = model(adj)
+        loss, rec_loss, reg_loss, cl_loss = _train_step(
+            batch, adj, model, optimizer, device, weight_decay, info_nce_weight
+        )
+        loss_dict["loss"] += loss
+        loss_dict["rec_loss"] += rec_loss
+        loss_dict["reg_loss"] += reg_loss
+        loss_dict["cl_loss"] += cl_loss
 
-        users = users.to(device)
-        pos_items = pos_items.to(device)
-        neg_items = neg_items.to(device)
-
-        user_embs = torch.index_select(all_user_emb, 0, users)
-        pos_embs = torch.index_select(all_item_emb, 0, pos_items)
-        neg_embs = torch.index_select(all_item_emb, 0, neg_items)
-
-        rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
-
-        reg_loss: torch.Tensor = torch.tensor(0)
-        if weight_decay > 0:
-            reg_loss = model.get_reg_loss(users, pos_items, neg_items)
-            loss_dict["reg_loss"] += reg_loss.item()
-
-        # Enable SGL-Without Augmentation for faster converge
-        info_nce_loss: torch.Tensor = torch.tensor(0)
-        if info_nce_weight > 0:
-            temperature = 0.2
-
-            tmp_user_idx = torch.unique(users)
-            tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
-
-            tmp_pos_idx = torch.unique(pos_items)
-            tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
-            view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
-
-            info_nce_loss = info_nce(view1, view1, temperature)
-
-            info_nce_loss = info_nce_loss * info_nce_weight
-            loss_dict["cl_loss"] += info_nce_loss.item()
-
-        loss = rec_loss + weight_decay * reg_loss + info_nce_loss
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_dict["loss"] += loss.item()
-        loss_dict["rec_loss"] += rec_loss.item()
-
-        num_sample += users.shape[0]
+        num_sample += batch[0].shape[0]
 
         # Logging
         if log_step and idx % log_step == 0:
@@ -463,51 +427,15 @@ def train_epoch_pep(
         cl_loss=0,
     )
     for idx, batch in enumerate(dataloader):
-        users, pos_items, neg_items = batch
-        all_user_emb, all_item_emb = model(adj)
+        loss, rec_loss, reg_loss, cl_loss = _train_step(
+            batch, adj, model, optimizer, device, weight_decay, info_nce_weight
+        )
+        loss_dict["loss"] += loss
+        loss_dict["rec_loss"] += rec_loss
+        loss_dict["reg_loss"] += reg_loss
+        loss_dict["cl_loss"] += cl_loss
 
-        users = users.to(device)
-        pos_items = pos_items.to(device)
-        neg_items = neg_items.to(device)
-
-        user_embs = torch.index_select(all_user_emb, 0, users)
-        pos_embs = torch.index_select(all_item_emb, 0, pos_items)
-        neg_embs = torch.index_select(all_item_emb, 0, neg_items)
-
-        rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
-
-        reg_loss: torch.Tensor = torch.tensor(0)
-        if weight_decay > 0:
-            reg_loss = model.get_reg_loss(users, pos_items, neg_items)
-            loss_dict["reg_loss"] += reg_loss.item()
-
-        # Enable SGL-Without Augmentation for faster converge
-        info_nce_loss: torch.Tensor = torch.tensor(0)
-        if info_nce_weight > 0:
-            temperature = 0.2
-
-            tmp_user_idx = torch.unique(users)
-            tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
-
-            tmp_pos_idx = torch.unique(pos_items)
-            tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
-            view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
-
-            info_nce_loss = info_nce(view1, view1, temperature)
-
-            info_nce_loss = info_nce_loss * info_nce_weight
-            loss_dict["cl_loss"] += info_nce_loss.item()
-
-        loss = rec_loss + weight_decay * reg_loss + info_nce_loss
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        loss_dict["loss"] += loss.item()
-        loss_dict["rec_loss"] += rec_loss.item()
-
-        num_sample += users.shape[0]
+        num_sample += batch[0].shape[0]
 
         # Logging
         if log_step and idx % log_step == 0:
@@ -540,3 +468,54 @@ def train_epoch_pep(
         loss_dict[metric] = avg
 
     return loss_dict
+
+
+def _train_step(
+    batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    adj,
+    model: IGraphBaseCore,
+    optimizer,
+    device="cuda",
+    weight_decay=0,
+    info_nce_weight=0,
+) -> Tuple[float, float, float, float]:
+    """single train step of LightGCN model"""
+    users, pos_items, neg_items = batch
+    all_user_emb, all_item_emb = model(adj)
+
+    users = users.to(device)
+    pos_items = pos_items.to(device)
+    neg_items = neg_items.to(device)
+
+    user_embs = torch.index_select(all_user_emb, 0, users)
+    pos_embs = torch.index_select(all_item_emb, 0, pos_items)
+    neg_embs = torch.index_select(all_item_emb, 0, neg_items)
+
+    rec_loss = bpr_loss(user_embs, pos_embs, neg_embs)
+
+    reg_loss: torch.Tensor = torch.tensor(0)
+    if weight_decay > 0:
+        reg_loss = model.get_reg_loss(users, pos_items, neg_items)
+
+    # Enable SGL-Without Augmentation for faster converge
+    info_nce_loss: torch.Tensor = torch.tensor(0)
+    if info_nce_weight > 0:
+        temperature = 0.2
+
+        tmp_user_idx = torch.unique(users)
+        tmp_user_embs = torch.index_select(all_user_emb, 0, tmp_user_idx)
+
+        tmp_pos_idx = torch.unique(pos_items)
+        tmp_pos_embs = torch.index_select(all_item_emb, 0, tmp_pos_idx)
+        view1 = torch.cat([tmp_user_embs, tmp_pos_embs], 0)
+
+        info_nce_loss = info_nce(view1, view1, temperature)
+
+        info_nce_loss = info_nce_loss * info_nce_weight
+
+    loss = rec_loss + weight_decay * reg_loss + info_nce_loss
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    return loss.item(), rec_loss.item(), reg_loss.item(), info_nce_loss.item()
