@@ -21,7 +21,7 @@ class ICFTrainer(ABC):
         ...
 
     @abstractmethod
-    def train_epoch(self, dataloader) -> Dict[str, float]:
+    def train_epoch(self, dataloader, epoch_idx: int) -> Dict[str, float]:
         """
         Args:
             dataloader: Train dataloader

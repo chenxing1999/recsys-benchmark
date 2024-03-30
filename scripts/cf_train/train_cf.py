@@ -97,7 +97,7 @@ def main(argv: Optional[Sequence[str]] = None):
     warmup = config.get("warmup", 0)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
-        train_metrics = trainer.train_epoch(train_dataloader)
+        train_metrics = trainer.train_epoch(train_dataloader, epoch_idx)
 
         train_metrics.update(metrics.get_env_metrics())
         for metric, value in train_metrics.items():
