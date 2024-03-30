@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from typing import List, Union
 
@@ -100,6 +99,12 @@ class LightGCN(IGraphBaseCore):
         ) / (2 * len(users))
         return reg_loss
 
+    def get_embs(self):
+        return [
+            ("user", self.user_emb_table),
+            ("item", self.item_emb_table),
+        ]
+
 
 class SingleLightGCN(IGraphBaseCore):
     """LightGCN model based on https://arxiv.org/pdf/2002.02126.pdf"""
@@ -176,6 +181,11 @@ class SingleLightGCN(IGraphBaseCore):
 
         return reg_loss
 
+    def get_embs(self):
+        return [
+            ("user-item", self.emb_table),
+        ]
+
 
 @dataclass
 class LightGCNConfig:
@@ -184,34 +194,6 @@ class LightGCNConfig:
 
     hidden_size: int = 64
     num_layers: int = 2
-
-
-def save_lightgcn_emb_checkpoint(
-    model: Union[LightGCN, SingleLightGCN],
-    checkpoint_dir: str,
-    name: str = "target",
-):
-    """Wrapper to save checkpoint embedding to a folder
-    in the belowing format:
-        {checkpoint_dir}/{field_name}/{name}.pth
-    """
-    embs: List[IEmbedding]
-    field_names: List[str]
-    if isinstance(model, LightGCN):
-        embs = [model.user_emb_table, model.item_emb_table]
-        field_names = ["user", "item"]
-    elif isinstance(model, SingleLightGCN):
-        embs = [model.emb_table]
-        field_names = ["user-item"]
-    else:
-        raise ValueError()
-
-    for field_name, emb in zip(field_names, embs):
-        field_dir = os.path.join(checkpoint_dir, field_name)
-        os.makedirs(field_dir, exist_ok=True)
-
-        path = os.path.join(field_dir, f"{name}.pth")
-        torch.save(emb.state_dict(), path)
 
 
 def get_sparsity_and_param(model: Union[LightGCN, SingleLightGCN]):

@@ -29,6 +29,11 @@ class IGraphBaseCore(nn.Module):
     def forward(self, matrix):
         return self.get_emb_table(matrix)
 
+    @abstractmethod
+    def get_embs(self) -> List[Tuple[str, nn.Module]]:
+        """Return pairs of (name, emb_module)"""
+        ...
+
 
 class ICollabRecSys(ABC):
     """Interface for Collaborated-based Recommendation System"""

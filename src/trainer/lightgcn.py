@@ -1,5 +1,5 @@
 """Define training and evaluating logic for LightGCN"""
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Dict, List, Optional, Set, Tuple, Union, cast
 
 import torch
 from loguru import logger
@@ -8,98 +8,8 @@ from torch.utils.data import DataLoader
 from src import metrics as metric_utils
 from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.losses import bpr_loss, info_nce
-from src.models import IGraphBaseCore, get_graph_model
+from src.models import IGraphBaseCore
 from src.models.lightgcn import LightGCN, SingleLightGCN, get_sparsity_and_param
-from src.trainer.base_cf import ICFTrainer
-
-
-class GraphTrainer(ICFTrainer):
-    def __init__(
-        self,
-        num_users: int,
-        num_items: int,
-        config: Dict[str, Any],
-    ):
-        model_config = config["model"]
-        self._model = get_graph_model(num_users, num_items, model_config)
-        self.config = config
-        is_opt_embed = "opt_embed" in config
-        if is_opt_embed:
-            self._init_optembed()
-
-        if torch.cuda.is_available():
-            device = "cuda"
-        else:
-            device = "cpu"
-
-        self.device = device
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=config["learning_rate"],
-        )
-
-    def _init_optembed(self):
-        # opt_embed specific code
-        config = self.config
-        model_config = config["model"]
-        is_retrain = "retrain" in model_config["embedding_config"]["name"]
-
-        init_weight_path = config["opt_embed"]["init_weight_path"]
-        if not is_retrain:
-            torch.save(
-                {
-                    "full": self.model.state_dict(),
-                },
-                init_weight_path,
-            )
-        else:
-            info = torch.load(init_weight_path)
-            mask = info["mask"]
-            keys = self.model.load_state_dict(info["full"], False)
-            length_miss = len(keys[0])
-            expected_miss = sum(
-                1
-                for key in keys[0]
-                if key in ["user_emb_table._mask", "item_emb_table._mask"]
-            )
-            length_miss = length_miss - expected_miss
-            assert length_miss == 0, f"There are some keys missing: {keys[0]}"
-            self.model.item_emb_table.init_mask(
-                mask_d=mask["item"]["mask_d"], mask_e=None
-            )
-            self.model.user_emb_table.init_mask(
-                mask_d=mask["user"]["mask_d"], mask_e=None
-            )
-
-    @property
-    def model(self):
-        return self._model
-
-    def train_epoch(self, dataloader, epoch_idx: int) -> Dict[str, float]:
-        return train_epoch(
-            dataloader,
-            self.model,
-            self.optimizer,
-            self.device,
-            self.config["log_step"],
-            self.config["weight_decay"],
-            None,
-            self.config["info_nce_weight"],
-        )
-
-    def validate_epoch(
-        self,
-        train_dataset: CFGraphDataset,
-        dataloader,
-        metrics: Optional[List[str]] = None,
-    ) -> Dict[str, float]:
-        return validate_epoch(
-            train_dataset,
-            dataloader,
-            self.model,
-            self.device,
-            metrics=metrics,
-        )
 
 
 def train_epoch(

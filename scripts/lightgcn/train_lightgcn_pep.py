@@ -18,7 +18,7 @@ from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
 from src.models import LightGCN, get_graph_model
 from src.models.embeddings import PepEmbeeding, RetrainPepEmbedding
-from src.models.lightgcn import get_sparsity_and_param, save_lightgcn_emb_checkpoint
+from src.models.lightgcn import get_sparsity_and_param, save_cf_emb_checkpoint
 from src.trainer.lightgcn import train_epoch_pep, validate_epoch
 from src.utils import set_seed
 
@@ -352,7 +352,7 @@ def _main(trial: optuna.Trial, base_config: Dict) -> Tuple[float, float]:
                 if not achieved_target and sparsity > target_sparsity:
                     logger.info("found sparsity target")
                     achieved_target = True
-                    save_lightgcn_emb_checkpoint(model, trial_checkpoint)
+                    save_cf_emb_checkpoint(model, trial_checkpoint)
                     break
 
     if config["enable_profile"]:
