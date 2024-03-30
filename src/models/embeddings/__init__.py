@@ -1,5 +1,5 @@
 import copy
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -69,3 +69,27 @@ def get_embedding(
 
     embedding_config["name"] = name
     return emb
+
+
+def detect_special(config: Dict[str, Any]) -> Tuple[Optional[str], bool]:
+    """
+    Detect if model is in mode "pep", "optembed", "cerp"
+        Note: The above embedding usually not fit into original training script
+            so required special treatment
+    Detect if model is for retraining
+    """
+    emb_name = config["model"].get("embedding_config", {"name": "vanilla"})["name"]
+
+    kws = ["pep", "cerp"]
+
+    for kw in kws:
+        if kw in emb_name:
+            return kw, "retrain" in emb_name
+
+    if "optembed_d" in emb_name:
+        return "optembed_d", "retrain" in emb_name
+
+    if "optembed" in emb_name:
+        return "optembed", "retrain" in emb_name
+
+    return None, False

@@ -89,12 +89,10 @@ def main(argv: Optional[Sequence[str]] = None):
 
     logger.info(f"Model config: {model_config}")
 
-    best_ndcg = 0
     num_epochs = config["num_epochs"]
 
-    early_stop_count = 0
-    early_stop_config = config.get("early_stop_patience", 0)
-    warmup = config.get("warmup", 0)
+    config.get("early_stop_patience", 0)
+    config.get("warmup", 0)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = trainer.train_epoch(train_dataloader, epoch_idx)
@@ -114,25 +112,13 @@ def main(argv: Optional[Sequence[str]] = None):
             for key, value in val_metrics.items():
                 logger.log_metric(f"val/{key}", value, epoch_idx)
 
-            if best_ndcg < val_metrics["ndcg"]:
-                logger.info("New best, saving model...")
-                best_ndcg = val_metrics["ndcg"]
-
-                checkpoint = {
-                    "state_dict": model.state_dict(),
-                    "model_config": model_config,
-                    "val_metrics": val_metrics,
-                    "num_users": train_dataset.num_users,
-                    "num_items": train_dataset.num_items,
-                }
-                torch.save(checkpoint, config["checkpoint_path"])
-                early_stop_count = 0
-            elif warmup <= epoch_idx:
-                early_stop_count += 1
-                logger.debug(f"{early_stop_count=}")
-
-                if early_stop_config and early_stop_count > early_stop_config:
-                    return
+            stop_train = trainer.epoch_end(
+                train_metrics,
+                val_metrics,
+                epoch_idx,
+            )
+            if stop_train:
+                return
 
 
 if __name__ == "__main__":
