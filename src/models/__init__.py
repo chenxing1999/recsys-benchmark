@@ -1,4 +1,5 @@
-from typing import Dict, Type
+import os
+from typing import Dict, Type, Union
 
 import torch
 
@@ -42,3 +43,21 @@ def load_graph_model(checkpoint_path: str) -> IGraphBaseCore:
     model = get_graph_model(num_users, num_items, model_config)
     model.load_state_dict(checkpoint["state_dict"])
     return model
+
+
+def save_cf_emb_checkpoint(
+    model: Union[LightGCN, SingleLightGCN],
+    checkpoint_dir: str,
+    name: str = "target",
+):
+    """Wrapper to save checkpoint embedding to a folder
+    in the belowing format:
+        {checkpoint_dir}/{field_name}/{name}.pth
+    """
+
+    for field_name, emb in model.get_embs():
+        field_dir = os.path.join(checkpoint_dir, field_name)
+        os.makedirs(field_dir, exist_ok=True)
+
+        path = os.path.join(field_dir, f"{name}.pth")
+        torch.save(emb.state_dict(), path)

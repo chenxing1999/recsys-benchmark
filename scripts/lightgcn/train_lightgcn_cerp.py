@@ -15,9 +15,8 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.loggers import Logger
-from src.models import get_graph_model
+from src.models import get_graph_model, save_cf_emb_checkpoint
 from src.models.embeddings.cerp_embedding_utils import train_epoch_cerp
-from src.models.lightgcn import save_lightgcn_emb_checkpoint
 from src.trainer.lightgcn import validate_epoch
 from src.utils import set_seed
 
@@ -227,7 +226,7 @@ def _main(trial, base_config):
     trial_checkpoint = cerp_config["trial_checkpoint"]
 
     logger.info("Save initial checkpoint")
-    save_lightgcn_emb_checkpoint(model, trial_checkpoint, "initial")
+    save_cf_emb_checkpoint(model, trial_checkpoint, "initial")
 
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -285,7 +284,7 @@ def _main(trial, base_config):
 
         if train_metrics["sparsity"] >= target_sparsity:
             logger.info("Found target sparsity")
-            save_lightgcn_emb_checkpoint(model, trial_checkpoint)
+            save_cf_emb_checkpoint(model, trial_checkpoint)
             break
 
     trial.set_user_attr("diff_sparsity", target_sparsity - train_metrics["sparsity"])
