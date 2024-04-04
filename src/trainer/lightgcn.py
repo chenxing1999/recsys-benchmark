@@ -230,20 +230,13 @@ def train_epoch_optembed(
             loss_dict["cl_loss"] += info_nce_loss.item()
 
         loss = rec_loss + weight_decay * reg_loss + info_nce_loss
-        if isinstance(model, LightGCN):
-            # typehint for mypy
-            model.user_emb_table = cast(OptEmbed, model.user_emb_table)
-            model.item_emb_table = cast(OptEmbed, model.item_emb_table)
 
-            loss_s = model.user_emb_table.get_l_s()
-            loss_s = loss_s + model.item_emb_table.get_l_s()
-        elif isinstance(model, SingleLightGCN):
-            # typehint for mypy
-            model.emb_table = cast(OptEmbed, model.emb_table)
+        loss_s = torch.tensor(0)
+        for name, emb in model.get_embs():
+            assert isinstance(emb, OptEmbed)
+            emb = cast(OptEmbed, emb)
+            loss_s = loss_s + emb.get_l_s()
 
-            loss_s = model.emb_table.get_l_s()
-        else:
-            raise ValueError()
         loss = loss + alpha * loss_s
 
         for optimizer in optimizers:
@@ -318,6 +311,8 @@ def train_epoch_pep(
         reg_loss
         rec_loss
         cl_loss
+        sparsity
+        num_params
     """
     from src.models.lightgcn import get_sparsity_and_param
 

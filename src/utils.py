@@ -5,18 +5,51 @@ import numpy as np
 import torch
 
 
-def prune(state: Dict[str, torch.Tensor], p: float):
+def prune(
+    state: Dict[str, torch.Tensor],
+    p: float,
+    min_item: int = 0,
+):
     """Prune state dict based on L2 norm to p sparsity"""
     for name, weight in state.items():
         assert len(weight.shape) == 2
-        h = weight.shape[1]
-        l2 = (weight * weight).flatten()
-        indices = torch.argsort(l2)
+        n_item, h = weight.shape
+
+        norm = weight.abs()
+
+        topk = norm.topk(min_item, 1)
+        norm[
+            torch.arange(n_item).unsqueeze(-1).repeat(1, min_item), topk.indices
+        ] = float("inf")
+
+        indices = torch.argsort(norm.flatten())
         ori_i = indices // h
         ori_j = indices % h
 
         num_prune = int(indices.shape[0] * p)
         weight[ori_i[:num_prune], ori_j[:num_prune]] = 0
+
+        state[name] = weight
+
+    return state
+
+
+def random_prune(
+    state: Dict[str, torch.Tensor],
+    p: float,
+):
+    """Pruning model is a random way"""
+    for name, weight in state.items():
+        assert len(weight.shape) == 2
+        n_item, h = weight.shape
+
+        indices = torch.randperm(n_item * h)
+        ori_i = indices // h
+        ori_j = indices % h
+
+        num_prune = int(indices.shape[0] * p)
+        weight[ori_i[:num_prune], ori_j[:num_prune]] = 0
+
         state[name] = weight
 
     return state

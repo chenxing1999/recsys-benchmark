@@ -9,12 +9,12 @@ from torch.utils.data import DataLoader
 from src.dataset.cf_graph_dataset import CFGraphDataset, TestCFGraphDataset
 from src.models import load_graph_model
 from src.trainer.lightgcn import validate_epoch
-from src.utils import prune, set_seed
+from src.utils import prune, random_prune, set_seed
 
 set_seed(2023)
 
 
-def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
+def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Namespace]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     parser.add_argument(
@@ -41,6 +41,19 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
         "--output_path",
         help="Path to saving pruned checkpoint",
     )
+    parser.add_argument(
+        "-n",
+        "--num_min_item",
+        help="Number of min item per user/item",
+        default=0,
+        type=int,
+    )
+    parser.add_argument(
+        "-r",
+        "--is_random",
+        help="Run random pruning",
+        action="store_true",
+    )
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
         config = yaml.safe_load(fin)
@@ -50,11 +63,14 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
 
     if args.use_test_dataset:
         config["run_test"] = True
-    return config, args.prune_ratio, args.output_path
+    return config, args
 
 
 def main(argv: Optional[Sequence[str]] = None):
-    config, prune_ratio, output_path = get_config(argv)
+    config, args = get_config(argv)
+
+    prune_ratio = args.prune_ratio
+    output_path = args.output_path
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -90,7 +106,10 @@ def main(argv: Optional[Sequence[str]] = None):
     model = load_graph_model(checkpoint_path)
     model.to(device)
     if prune_ratio > 0:
-        state = prune(model.state_dict(), prune_ratio)
+        if not args.is_random:
+            state = prune(model.state_dict(), prune_ratio, args.num_min_item)
+        else:
+            state = random_prune(model.state_dict(), prune_ratio)
         model.load_state_dict(state)
 
     val_metrics = validate_epoch(

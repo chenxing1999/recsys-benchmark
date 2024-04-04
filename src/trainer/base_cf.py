@@ -24,6 +24,7 @@ class CFTrainer:
             config: Config from .yaml file
         """
         self.config = config
+        self.model_config = config["model"]
         self.mode, self.is_retrain = detect_special(config)
 
         self.early_stop_count = 0
@@ -33,6 +34,13 @@ class CFTrainer:
 
         self.num_users = num_users
         self.num_items = num_items
+
+        if torch.cuda.is_available():
+            device = "cuda"
+        else:
+            device = "cpu"
+
+        self.device = device
 
     @abstractmethod
     def train_epoch(self, dataloader, epoch_idx: int) -> Dict[str, float]:
@@ -85,7 +93,7 @@ class CFTrainer:
         # Check early stop + save on best model
         if self.best_ndcg < val_metrics["ndcg"]:
             logger.info("New best, saving model...")
-            val_metrics["ndcg"]
+            self.best_ndcg = val_metrics["ndcg"]
 
             checkpoint = {
                 "state_dict": self.model.state_dict(),
@@ -114,7 +122,7 @@ class CFTrainer:
             if self.is_cerp:
                 emb_conf = self.config["cerp"]
             elif self.is_pep:
-                emb_conf = self.config["pep"]
+                emb_conf = self.config["pep_config"]
 
             checkpoint_dir = emb_conf["trial_checkpoint"]
             main_target_sparsity = emb_conf["target_sparsity"]
@@ -198,11 +206,13 @@ class CFTrainer:
             ps,
             lr=self.config["learning_rate"],
         )
+        logger.info("Special Optimizer for PEP")
+        logger.debug(self.optimizer)
 
         # Save model_init
         model_init_path = pep_config["model_init_path"]
         if os.path.exists(model_init_path):
-            logger.debug("init random model...")
+            logger.debug(f"init available model at {model_init_path}")
             state = torch.load(model_init_path)
             self.model.load_state_dict(state, strict=False)
         else:
@@ -212,10 +222,17 @@ class CFTrainer:
             state = self.model.state_dict()
             torch.save(state, model_init_path)
 
+        emb_config = self.model_config["embedding_config"]
+        target_sparsity = emb_config.get("target_sparsity")
+        if not target_sparsity:
+            target_sparsity = [0.5, 0.8, 0.95]
+
+        target_sparsity.sort()
+        self.target_sparsity = target_sparsity
+
     def _init_optembed_d(self):
         """Save init model"""
         config = self.config
-        config["model"]
 
         init_weight_path = config["opt_embed"]["init_weight_path"]
         torch.save(
@@ -270,13 +287,9 @@ class CFTrainer:
             then update list
 
         """
+        target_sparsity = self.target_sparsity
         emb_config = self.model_config["embedding_config"]
-        target_sparsity = emb_config["target_sparsity"]
 
-        if not target_sparsity:
-            target_sparsity = [0.5, 0.8, 0.95]
-
-        target_sparsity.sort()
         cur_min_idx = 0
 
         checkpoint_dir = emb_config.get(
@@ -299,8 +312,15 @@ class CFTrainer:
         for i in range(leftover):
             target_sparsity[i] = target_sparsity[i + cur_min_idx]
 
-        emb_config["target_sparsity"] = target_sparsity[:leftover]
-        self.model_config["embedding_config"] = emb_config
+        if cur_min_idx > 0:
+            logger.debug(f"new {target_sparsity=}")
+            self.target_sparsity = target_sparsity
+
         if len(target_sparsity) == 0:
             return True
         return False
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(mode={self.mode}, is_retrain={self.is_retrain})"
+        )
