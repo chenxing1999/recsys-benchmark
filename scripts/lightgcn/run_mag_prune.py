@@ -176,7 +176,6 @@ def main(argv: Optional[Sequence[str]] = None):
     config, args = get_config(argv)
 
     prune_ratio = args.prune_ratio
-    args.output_path
 
     # Loading train dataset
     logger.info("Load train dataset...")
