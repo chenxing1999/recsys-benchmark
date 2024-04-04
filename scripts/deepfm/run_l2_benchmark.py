@@ -12,7 +12,7 @@ from src.trainer.deepfm import validate_epoch
 from src.utils import prune
 
 
-def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
+def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Namespace]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     parser.add_argument(
@@ -39,6 +39,13 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
         "--output_path",
         help="Path to saving pruned checkpoint",
     )
+    parser.add_argument(
+        "-n",
+        "--num_min_item",
+        help="Number of min item per user/item",
+        default=0,
+        type=int,
+    )
 
     args = parser.parse_args(argv)
     with open(args.config_file) as fin:
@@ -49,11 +56,14 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, float]:
 
     if args.use_test_dataset:
         config["run_test"] = True
-    return config, args.prune_ratio, args.output_path
+    return config, args
 
 
 def main(argv: Optional[Sequence[str]] = None):
-    config, prune_ratio, output_path = get_config(argv)
+    config, args = get_config(argv)
+
+    prune_ratio = args.prune_ratio
+    output_path = args.output_path
 
     # Loading train dataset
     logger.info("Load train dataset...")
@@ -99,7 +109,7 @@ def main(argv: Optional[Sequence[str]] = None):
     checkpoint_path = config["checkpoint_path"]
     model.to(device)
     if prune_ratio > 0:
-        state = prune(model.embedding.state_dict(), prune_ratio)
+        state = prune(model.embedding.state_dict(), prune_ratio, args.num_min_item)
         model.embedding.load_state_dict(state)
 
     # uncomment this for TTRec
