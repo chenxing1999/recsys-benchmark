@@ -128,7 +128,7 @@ class CFTrainer:
             main_target_sparsity = emb_conf["target_sparsity"]
 
             if cur_sparsity > main_target_sparsity:
-                logger.info("Found main target sparsity")
+                logger.info(f"Found main target sparsity. Save at {checkpoint_dir}")
                 save_cf_emb_checkpoint(
                     self.model,
                     checkpoint_dir,
@@ -163,7 +163,7 @@ class CFTrainer:
     @property
     def is_special(self):
         """most retrain can be train normally, so let just define this"""
-        return self.mode is not None or self.is_retrain
+        return self.mode is not None and not self.is_retrain
 
     def _init_not_retrain(self):
         """Model init logic for special not retrain mode"""
@@ -304,7 +304,7 @@ class CFTrainer:
             logger.info(f"cur_sparsity is larger than {sparsity}")
 
             # Save model
-            save_cf_emb_checkpoint(self.model, checkpoint_dir, "{sparsity:.4f}.pth")
+            save_cf_emb_checkpoint(self.model, checkpoint_dir, f"{sparsity:.4f}")
             cur_min_idx += 1
 
         # update list
@@ -313,8 +313,9 @@ class CFTrainer:
             target_sparsity[i] = target_sparsity[i + cur_min_idx]
 
         if cur_min_idx > 0:
-            logger.debug(f"new {target_sparsity=}")
+            target_sparsity = target_sparsity[:leftover]
             self.target_sparsity = target_sparsity
+            logger.debug(f"new {target_sparsity=}")
 
         if len(target_sparsity) == 0:
             return True
