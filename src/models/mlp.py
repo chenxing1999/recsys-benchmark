@@ -124,7 +124,7 @@ class NeuMF(nn.Module):
             res.extend(
                 [
                     ("mlp-user", self._mlp.user_emb_table),
-                    ("mlp-user", self._mlp.item_emb_table),
+                    ("mlp-item", self._mlp.item_emb_table),
                 ]
             )
 
@@ -132,7 +132,7 @@ class NeuMF(nn.Module):
             res.extend(
                 [
                     ("gmf-user", self._gmf.user_emb_table),
-                    ("gmf-user", self._gmf.item_emb_table),
+                    ("gmf-item", self._gmf.item_emb_table),
                 ]
             )
 
