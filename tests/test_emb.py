@@ -517,7 +517,9 @@ def test_dhe_compute_v2_nocuda():
 
 def test_dhe_compute_v2_init_universal():
     field_dims = [23, 31]
-    emb = DHEmbedding(field_dims, 64, inp_size=64, hidden_sizes=[32, 32], use_universal_hash=True)
+    emb = DHEmbedding(
+        field_dims, 64, inp_size=64, hidden_sizes=[32, 32], use_universal_hash=True
+    )
 
     emb._init_all_hash()
     assert emb._cache.shape == (sum(field_dims), 64)
