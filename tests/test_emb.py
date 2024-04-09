@@ -500,6 +500,7 @@ def test_dhe_compute_v2_nocuda():
     field_dims = [23, 31]
     emb = DHEmbedding(field_dims, 64, inp_size=64, hidden_sizes=[32, 32])
     emb.eval()
+    DHEmbedding.COUNTER = 0
 
     device = "cpu"
     emb.to(device)
@@ -512,3 +513,12 @@ def test_dhe_compute_v2_nocuda():
         emb.compute_v2 = True
         res2 = emb(inp)
         assert res1.isclose(res2).all()
+
+
+def test_dhe_compute_v2_init_universal():
+    field_dims = [23, 31]
+    emb = DHEmbedding(field_dims, 64, inp_size=64, hidden_sizes=[32, 32], use_universal_hash=True)
+
+    emb._init_all_hash()
+    assert emb._cache.shape == (sum(field_dims), 64)
+    DHEmbedding.COUNTER = 0
