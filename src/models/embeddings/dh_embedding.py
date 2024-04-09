@@ -226,11 +226,12 @@ class DHEmbedding(IEmbedding):
         res = []
         for start in range(0, len(item), BATCH_SIZE):
             tmp_item = item[start : start + BATCH_SIZE]
-            result = slopes * (tmp_item + self._prefix) + bias
+            result = slopes * (tmp_item + self._prefix + 1) + bias
             result = result % primes % self.m
             result = result / (self.m - 1)
             res.append(result)
         result = torch.cat(res)
+        result = result * 2 - 1
 
         return result
 
