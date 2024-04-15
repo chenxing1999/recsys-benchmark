@@ -138,6 +138,41 @@ class NeuMF(nn.Module):
 
         return res
 
+    def get_prune_loss_tanh(
+        self,
+        users,
+        pos_items,
+        neg_items,
+        k=100,
+    ):
+        loss = torch.tensor(0.0, device=users.device)
+        if self.mlp_flag():
+            emb = self._mlp.item_emb_table(pos_items)
+            loss += self._get_prune_loss(emb, k)
+
+            emb = self._mlp.item_emb_table(neg_items)
+            loss += self._get_prune_loss(emb, k)
+
+            emb = self._mlp.user_emb_table(users)
+            loss += self._get_prune_loss(emb, k)
+
+        if self.gmf_flag():
+            emb = self._gmf.item_emb_table(pos_items)
+            loss += self._get_prune_loss(emb, k)
+
+            emb = self._gmf.item_emb_table(neg_items)
+            loss += self._get_prune_loss(emb, k)
+
+            emb = self._gmf.user_emb_table(users)
+            loss += self._get_prune_loss(emb, k)
+        return loss
+
+    def _get_prune_loss(self, emb, k):
+        """Get pruning loss from CERP"""
+        emb = emb * k
+        loss = -torch.tanh(emb).norm(2) ** 2
+        return loss
+
 
 def get_sparsity_and_param(model: NeuMF) -> Tuple[float, int]:
     n_params = 0

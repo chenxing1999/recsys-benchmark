@@ -11,6 +11,9 @@ from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.models.mlp import ModelFlag, NeuMF, get_sparsity_and_param
 from src.trainer.base_cf import CFTrainer
 
+EPOCH = 0
+IS_DHE = 0
+
 
 class NeuMFTrainer(CFTrainer):
     def __init__(
@@ -37,6 +40,12 @@ class NeuMFTrainer(CFTrainer):
         ), "Not implemented for OptEmbed. Please use Legacy code"
 
         self.l2_reg = config["weight_decay"]
+
+        self.pretrain_step = config.get("pretrain_step", 0)
+        if self.pretrain_step:
+            logger.debug(f"Enable pretrain {self.pretrain_step=}")
+            self._model.flag = ModelFlag.MLP
+            assert self.pretrain_step % 2 == 0
 
         # Emb specific code
         # note: will not support OptEmbed for now,
@@ -99,6 +108,15 @@ class NeuMFTrainer(CFTrainer):
                 ...
             }
         """
+        global EPOCH
+        EPOCH += 1
+        if self.pretrain_step:
+            if epoch_idx == self.pretrain_step // 2:
+                self._model.flag = ModelFlag.GMF
+            elif epoch_idx == self.pretrain_step:
+                self._model.flag = ModelFlag.NMF
+                self._model.update_weight(0.5)
+
         if not self.is_special or self.mode == "optembed_d":
             return train_epoch(
                 dataloader,
@@ -124,7 +142,22 @@ class NeuMFTrainer(CFTrainer):
         elif self.is_opt_embed:
             raise NotImplementedError()
         elif self.is_cerp:
-            raise NotImplementedError()
+            cerp_config = self.config.get(
+                "cerp", {"gamma_init": 1.0, "gamma_decay": 0.5}
+            )
+            gamma_init = cerp_config["gamma_init"]
+            gamma_decay = cerp_config["gamma_decay"]
+            return train_epoch_cerp(
+                dataloader,
+                self.model,
+                self.optimizer,
+                self.device,
+                self.config["log_step"],
+                self.l2_reg,  # l2 on embedding
+                None,
+                self.config["cerp"]["target_sparsity"],
+                (gamma_decay**epoch_idx) * gamma_init,
+            )
 
     def validate_epoch(
         self,
@@ -142,13 +175,27 @@ class NeuMFTrainer(CFTrainer):
 
         Returns: By default only calculate ndcg@20
         """
-        return validate_epoch(
+        self.model.eval()
+        emb_name = self.get_emb_name()
+        if emb_name == "dhe":
+            logger.debug("init weight for dhe")
+            for _, emb in self.model.get_embs():
+                emb = emb.to(self.device)
+                with torch.no_grad():
+                    emb._emb = emb.get_weight()
+
+        result = validate_epoch(
             train_dataset,
             dataloader,
             self.model,
             self.device,
             metrics=metrics,
         )
+        if emb_name == "dhe":
+            logger.debug("delete weight for dhe")
+            for _, emb in self.model.get_embs():
+                emb._emb = None
+        return result
 
     @property
     def model(self):
@@ -158,7 +205,7 @@ class NeuMFTrainer(CFTrainer):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.config["learning_rate"],
-            # weight_decay=self.config["weight_decay"],
+            # weight_decay=1e-3,
         )
 
 
@@ -302,12 +349,100 @@ def train_epoch_pep(
     return loss_dict
 
 
+def train_epoch_cerp(
+    dataloader: DataLoader,
+    model: NeuMF,
+    optimizer,
+    device="cuda",
+    log_step=10,
+    weight_decay=0,
+    profiler=None,
+    target_sparsity=0,
+    prune_loss_weight=0,
+    clip_grad_norm=100,
+) -> Dict[str, float]:
+    """Training Epoch for PEP Pretrain step with NeuMF model
+
+    Args:
+
+    Returns: Dict contains following keys:
+        loss
+        reg_loss
+        rec_loss
+        cl_loss
+        sparsity
+        num_params
+    """
+    model.train()
+    model.to(device)
+
+    num_sample = 0
+
+    loss_dict: Dict[str, float] = dict(
+        loss=0,
+        reg_loss=0,
+        rec_loss=0,
+        prune_loss=0,
+    )
+    for idx, batch in enumerate(dataloader):
+        loss, rec_loss, reg_loss, prune_loss = _train_step(
+            batch,
+            model,
+            optimizer,
+            device,
+            weight_decay,
+            prune_loss_weight,
+            clip_grad_norm,
+        )
+
+        loss_dict["loss"] += loss.item()
+        loss_dict["rec_loss"] += rec_loss.item()
+        loss_dict["reg_loss"] += reg_loss.item()
+        loss_dict["prune_loss"] += prune_loss.item()
+
+        num_sample += batch[0].shape[0]
+
+        # Logging
+        if log_step and idx % log_step == 0:
+            msg = f"Idx: {idx}"
+
+            sparsity, num_params = get_sparsity_and_param(model)
+            msg += f" - sparsity: {sparsity:.2f} - num_params: {num_params}"
+
+            loss_dict["sparsity"] = sparsity
+            loss_dict["num_params"] = num_params
+            for metric, value in loss_dict.items():
+                if metric in ["sparsity", "num_params"]:
+                    continue
+                if value > 0 or metric in ["prune_loss", "loss"]:
+                    avg = value / (idx + 1)
+                    msg += f" - {metric}: {avg:.2}"
+
+            logger.info(msg)
+            if sparsity > target_sparsity:
+                logger.info("Found target sparsity")
+                break
+
+        if profiler:
+            profiler.step()
+
+    for metric, value in loss_dict.items():
+        avg = value / (idx + 1)
+        if metric in ["sparsity", "num_params"]:
+            continue
+        loss_dict[metric] = avg
+
+    return loss_dict
+
+
 def _train_step(
     batch,
     model: NeuMF,
     optimizer,
     device="cuda",
     weight_decay=0,
+    prune_loss_weight=0,
+    clip_grad_norm=0,
 ):
     users, pos_items, neg_items = batch
 
@@ -321,8 +456,18 @@ def _train_step(
 
     neg_items = neg_items.to(device)
 
-    y_hat_pos = model(users, pos_items)
-    y_hat_neg = model(users.repeat(n_repeat), neg_items)
+    # y_hat_pos = model(users, pos_items)
+    # y_hat_neg = model(users.repeat(n_repeat), neg_items)
+
+    # work around batch norm of DHE
+    y_hat = model(users.repeat(n_repeat + 1), torch.cat([pos_items, neg_items]))
+    y_hat_pos = y_hat[: len(pos_items)]
+    y_hat_neg = y_hat[len(pos_items) :]
+
+    # if EPOCH >= 2:
+    #     print("y_pos", y_hat_pos)
+    #     print("y_neg", y_hat_neg)
+    #     print()
 
     # bpr loss is actually slightly worse on a quick test
     # rec_loss = -F.logsigmoid(y_hat_pos - y_hat_neg).mean()
@@ -332,10 +477,19 @@ def _train_step(
     if weight_decay > 0:
         reg_loss = model.get_reg_loss(users, pos_items, neg_items)
 
-    loss = rec_loss + weight_decay * reg_loss
+    prune_loss = torch.tensor(0)
+    if prune_loss_weight > 0:
+        prune_loss = model.get_prune_loss_tanh(users, pos_items, neg_items)
+
+    loss = rec_loss + weight_decay * reg_loss + prune_loss * prune_loss_weight
     optimizer.zero_grad()
     loss.backward()
+    if clip_grad_norm > 0:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
     optimizer.step()
+
+    if prune_loss_weight > 0:
+        return loss, rec_loss, reg_loss, prune_loss
 
     return loss, rec_loss, reg_loss
 
@@ -370,9 +524,9 @@ def validate_epoch(
     graph = train_dataset.get_graph()
 
     model.eval()
+
     model = model.to(device)
     num_items = model.num_item
-    model.num_user
 
     all_items = torch.arange(num_items, device=device).unsqueeze(0)
 
@@ -389,6 +543,13 @@ def validate_epoch(
             user_tensor,
             all_items.repeat(batch_size, 1),
         )
+        # if EPOCH >= 2 and IS_DHE:
+        #     print("scores", scores[0])
+        #     print()
+        #     label = torch.zeros(len(scores[0]), device=scores.device)
+        #     label[graph[0]] = 1
+        #     print(F.binary_cross_entropy_with_logits(scores[0], label))
+        #     import pdb; pdb.set_trace()
 
         if filter_item_on_train:
             ind0 = []
