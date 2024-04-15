@@ -91,8 +91,6 @@ def main(argv: Optional[Sequence[str]] = None):
 
     num_epochs = config["num_epochs"]
 
-    config.get("early_stop_patience", 0)
-    config.get("warmup", 0)
     for epoch_idx in range(num_epochs):
         logger.log_metric("Epoch", epoch_idx, epoch_idx)
         train_metrics = trainer.train_epoch(train_dataloader, epoch_idx)

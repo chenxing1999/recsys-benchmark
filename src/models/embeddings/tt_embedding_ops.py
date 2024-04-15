@@ -540,7 +540,8 @@ class TableBatchedTTEmbeddingBag(torch.nn.Module):
             L.append(L_value)
             L_value *= self.tt_p_shapes[self.tt_ndim - t - 1]
         L.reverse()
-        self.register_buffer("L", torch.tensor(L, dtype=torch.int64))
+        device = torch.cuda.current_device()
+        self.register_buffer("L", torch.tensor(L, dtype=torch.int64, device=device))
         self.tt_cores = torch.nn.ParameterList()
         self.optimizer_state = BufferList("optimizer_state")
         for i in range(self.tt_ndim):

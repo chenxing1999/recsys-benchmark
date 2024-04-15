@@ -156,7 +156,7 @@ class OptEmbed(IOptEmbed):
                 mask_d = F.embedding(mask_d, self._full_mask_d)
 
             return emb * mask_d
-        else:
+        else:  # validate
             if isinstance(mask_d, (torch.IntTensor, torch.LongTensor)):
                 mask_d = mask_d.to(device)
                 field_dims = self._field_dims.to(device)

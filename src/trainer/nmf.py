@@ -78,15 +78,27 @@ class NeuMFTrainer(CFTrainer):
             expected_miss = sum(
                 1
                 for key in keys[0]
-                if key in ["user_emb_table._mask", "item_emb_table._mask"]
+                if key
+                in [
+                    "_gmf.user_emb_table._mask",
+                    "_mlp.user_emb_table._mask",
+                    "_gmf.item_emb_table._mask",
+                    "_mlp.item_emb_table._mask",
+                ]
             )
             length_miss = length_miss - expected_miss
             assert length_miss == 0, f"There are some keys missing: {keys[0]}"
-            self.model.item_emb_table.init_mask(
-                mask_d=mask["item"]["mask_d"], mask_e=None
+            self.model._mlp.item_emb_table.init_mask(
+                mask_d=mask["mlp_item"]["mask_d"], mask_e=None
             )
-            self.model.user_emb_table.init_mask(
-                mask_d=mask["user"]["mask_d"], mask_e=None
+            self.model._mlp.user_emb_table.init_mask(
+                mask_d=mask["mlp_user"]["mask_d"], mask_e=None
+            )
+            self.model._gmf.item_emb_table.init_mask(
+                mask_d=mask["gmf_item"]["mask_d"], mask_e=None
+            )
+            self.model._gmf.user_emb_table.init_mask(
+                mask_d=mask["gmf_user"]["mask_d"], mask_e=None
             )
 
     def train_epoch(self, dataloader, epoch_idx: int) -> Dict[str, float]:
@@ -111,6 +123,11 @@ class NeuMFTrainer(CFTrainer):
             elif epoch_idx == self.pretrain_step:
                 self._model.flag = ModelFlag.NMF
                 self._model.update_weight(0.5)
+
+        emb_name = self.get_emb_name()
+        if emb_name == "tt_emb" and epoch_idx == 5:
+            for name, emb in self.model.get_embs():
+                emb.cache_populate()
 
         if not self.is_special or self.mode == "optembed_d":
             return train_epoch(
@@ -171,13 +188,6 @@ class NeuMFTrainer(CFTrainer):
         Returns: By default only calculate ndcg@20
         """
         self.model.eval()
-        emb_name = self.get_emb_name()
-        if emb_name == "dhe":
-            logger.debug("init weight for dhe")
-            for _, emb in self.model.get_embs():
-                emb = emb.to(self.device)
-                with torch.no_grad():
-                    emb._emb = emb.get_weight()
 
         result = validate_epoch(
             train_dataset,
@@ -186,10 +196,8 @@ class NeuMFTrainer(CFTrainer):
             self.device,
             metrics=metrics,
         )
-        if emb_name == "dhe":
-            logger.debug("delete weight for dhe")
-            for _, emb in self.model.get_embs():
-                emb._emb = None
+
+        self.model.clear_cache()
         return result
 
     @property
