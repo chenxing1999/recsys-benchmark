@@ -270,6 +270,7 @@ class CFTrainer:
             params,
             lr=config["learning_rate"],
         )
+        logger.debug(f"Special optimizer for CERP: {self.optimizer}")
 
         # Save initial checkpoint
         cerp_config = config["cerp"]
@@ -325,3 +326,6 @@ class CFTrainer:
         return (
             f"{self.__class__.__name__}(mode={self.mode}, is_retrain={self.is_retrain})"
         )
+
+    def get_emb_name(self):
+        return self.config["model"].get("embedding_config", {"name": "vanilla"})["name"]
