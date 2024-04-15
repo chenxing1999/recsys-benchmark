@@ -11,9 +11,6 @@ from src.dataset.cf_graph_dataset import CFGraphDataset
 from src.models.mlp import ModelFlag, NeuMF, get_sparsity_and_param
 from src.trainer.base_cf import CFTrainer
 
-EPOCH = 0
-IS_DHE = 0
-
 
 class NeuMFTrainer(CFTrainer):
     def __init__(
@@ -108,8 +105,6 @@ class NeuMFTrainer(CFTrainer):
                 ...
             }
         """
-        global EPOCH
-        EPOCH += 1
         if self.pretrain_step:
             if epoch_idx == self.pretrain_step // 2:
                 self._model.flag = ModelFlag.GMF
@@ -464,11 +459,6 @@ def _train_step(
     y_hat_pos = y_hat[: len(pos_items)]
     y_hat_neg = y_hat[len(pos_items) :]
 
-    # if EPOCH >= 2:
-    #     print("y_pos", y_hat_pos)
-    #     print("y_neg", y_hat_neg)
-    #     print()
-
     # bpr loss is actually slightly worse on a quick test
     # rec_loss = -F.logsigmoid(y_hat_pos - y_hat_neg).mean()
     rec_loss = _log_loss(y_hat_pos, y_hat_neg)
@@ -543,13 +533,6 @@ def validate_epoch(
             user_tensor,
             all_items.repeat(batch_size, 1),
         )
-        # if EPOCH >= 2 and IS_DHE:
-        #     print("scores", scores[0])
-        #     print()
-        #     label = torch.zeros(len(scores[0]), device=scores.device)
-        #     label[graph[0]] = 1
-        #     print(F.binary_cross_entropy_with_logits(scores[0], label))
-        #     import pdb; pdb.set_trace()
 
         if filter_item_on_train:
             ind0 = []
