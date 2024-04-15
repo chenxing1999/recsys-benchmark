@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from .embeddings import IEmbedding, get_embedding
 
@@ -30,6 +31,7 @@ class NeuMF(nn.Module):
         hidden_sizes: Optional[List[int]] = None,
         p_dropout=0,
         embedding_config=None,
+        cache_inference=False,
     ):
         super().__init__()
         if embedding_config is None:
@@ -49,6 +51,7 @@ class NeuMF(nn.Module):
             num_item,
             emb_size // 2,
             embedding_config,
+            cache_inference,
         )
 
         self._mlp = _MLP(
@@ -58,6 +61,7 @@ class NeuMF(nn.Module):
             hidden_sizes,
             p_dropout,
             embedding_config,
+            cache_inference,
         )
 
     def update_weight(self, alpha):
@@ -173,6 +177,12 @@ class NeuMF(nn.Module):
         loss = -torch.tanh(emb).norm(2) ** 2
         return loss
 
+    def clear_cache(self):
+        self._mlp._user_emb = None
+        self._mlp._item_emb = None
+        self._gmf._user_emb = None
+        self._gmf._item_emb = None
+
 
 def get_sparsity_and_param(model: NeuMF) -> Tuple[float, int]:
     n_params = 0
@@ -196,6 +206,7 @@ class _MLP(nn.Module):
         hidden_sizes: List[int],
         p_dropout: float,
         embedding_config: Dict[str, Any],
+        cache_inference=False,
     ):
         super().__init__()
         self.embedding_config = embedding_config
@@ -212,6 +223,10 @@ class _MLP(nn.Module):
         self.mlp_fc = nn.Linear(inp_size, 1)
         self.mlp = nn.Sequential(*layers)
         self._init_weight()
+
+        self._cache_inference = cache_inference
+        self._user_emb = None
+        self._item_emb = None
 
     def _init_embedding(self, num_user, num_item, hidden_size):
         self.user_emb_table = get_embedding(
@@ -241,8 +256,17 @@ class _MLP(nn.Module):
         Returns:
             out: torch.FloatTensor - shape: Batch x K or Batch
         """
-        user_emb = self.user_emb_table(users)
-        item_emb = self.item_emb_table(items)
+        if self._cache_inference and not self.training:
+            if self._user_emb is None:
+                self._user_emb = self.user_emb_table.get_weight()
+                self._item_emb = self.item_emb_table.get_weight()
+
+            user_emb = F.embedding(users, self._user_emb)
+            item_emb = F.embedding(items, self._item_emb)
+
+        else:
+            user_emb = self.user_emb_table(users)
+            item_emb = self.item_emb_table(items)
 
         inputs = torch.cat([user_emb, item_emb], dim=-1)
         out = self.mlp(inputs)
@@ -259,11 +283,25 @@ class _GMF(nn.Module):
         num_item: int,
         num_factors: int,
         embedding_config: Dict[str, Any],
+        cache_inference: bool = False,
     ):
+        """
+        Args:
+            num_user
+            num_item
+            num_factors
+            embedding_config
+            cache_inference: If True, calculate the embedding first
+                then infer based on pre-calculated embedding
+        """
         super().__init__()
         self.embedding_config = embedding_config
         self._init_embedding(num_user, num_item, num_factors)
         self.gmf_fc = nn.Linear(num_factors, 1)
+
+        self._cache_inference = cache_inference
+        self._user_emb = None
+        self._item_emb = None
 
     def _init_embedding(self, num_user, num_item, hidden_size):
         self.user_emb_table = get_embedding(
@@ -288,8 +326,17 @@ class _GMF(nn.Module):
         Returns:
             out: torch.FloatTensor - shape: Batch x K or Batch
         """
-        user_emb = self.user_emb_table(users)
-        item_emb = self.item_emb_table(items)
+        if self._cache_inference and not self.training:
+            if self._user_emb is None:
+                self._user_emb = self.user_emb_table.get_weight()
+                self._item_emb = self.item_emb_table.get_weight()
+
+            user_emb = F.embedding(users, self._user_emb)
+            item_emb = F.embedding(items, self._item_emb)
+
+        else:
+            user_emb = self.user_emb_table(users)
+            item_emb = self.item_emb_table(items)
 
         out = user_emb * item_emb
         out = self.gmf_fc(out)

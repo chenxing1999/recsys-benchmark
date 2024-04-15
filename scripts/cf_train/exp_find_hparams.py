@@ -22,6 +22,10 @@ DEFAULT_BASE_CONFIG_PATH = os.path.join(
 )
 DEFAULT_BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
 
+# STABLE_RUN will use same process in training
+# If not STABLE_RUN: Run in subprocess
+STABLE_RUN = True
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -130,7 +134,11 @@ def objective(trial: optuna.Trial):
         yaml.dump(new_config, fout)
 
     # use subprocess to keep seed constant
-    subprocess.run(["python", train_cf.__file__, tmp_file])
+    if not STABLE_RUN:
+        subprocess.run(["python", train_cf.__file__, tmp_file])
+    else:
+        set_seed(2023)
+        train_cf.main([tmp_file])
 
     torch.cuda.empty_cache()
 

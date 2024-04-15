@@ -146,7 +146,7 @@ class CFTrainer:
 
     @property
     def is_opt_embed_d(self):
-        return self.mode == "opt_embed_d"
+        return self.mode == "optembed_d"
 
     @property
     def is_opt_embed(self):
@@ -163,6 +163,8 @@ class CFTrainer:
     @property
     def is_special(self):
         """most retrain can be train normally, so let just define this"""
+        if self.is_opt_embed_d:
+            return False
         return self.mode is not None and not self.is_retrain
 
     def _init_not_retrain(self):
@@ -323,8 +325,13 @@ class CFTrainer:
         return False
 
     def __repr__(self):
+        emb_name = self.get_emb_name()
         return (
-            f"{self.__class__.__name__}(mode={self.mode}, is_retrain={self.is_retrain})"
+            f"{self.__class__.__name__}("
+            f"mode={self.mode}, "
+            f"is_retrain={self.is_retrain}, "
+            f"emb_name={emb_name}"
+            ")"
         )
 
     def get_emb_name(self):
