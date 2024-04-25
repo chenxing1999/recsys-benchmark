@@ -106,6 +106,9 @@ def generate_config(trial):
         info_nce = trial.suggest_float("info_nce_weight", 0, 1, step=0.05)
         new_config["info_nce_weight"] = info_nce
         name += f"-info_nce{info_nce:.4f}"
+    else:
+        logger.debug("Remove InfoNCE Loss")
+        new_config["info_nce_weight"] = 0
 
     new_config["learning_rate"] = lr
     new_config["weight_decay"] = weight_decay

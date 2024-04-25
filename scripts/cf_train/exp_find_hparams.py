@@ -23,7 +23,7 @@ DEFAULT_BASE_CONFIG_PATH = os.path.join(
 DEFAULT_BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
 
 # STABLE_RUN will use same process in training
-# If not STABLE_RUN: Run in subprocess
+# If not STABLE_RUN: Run in subprocess -- Should set to False for DHE
 STABLE_RUN = True
 
 

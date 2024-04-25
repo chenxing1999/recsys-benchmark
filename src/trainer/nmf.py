@@ -1,4 +1,5 @@
 """Define training and evaluating logic for NeuMF"""
+import os
 from typing import Any, Dict, List, Optional, Set, Union
 
 import torch
@@ -47,7 +48,7 @@ class NeuMFTrainer(CFTrainer):
         # Emb specific code
         # note: will not support OptEmbed for now,
         # just support OptEmbed-D
-        if self.is_retrain and self.is_opt_embed_d:
+        if self.is_opt_embed_d:
             self._init_optembed_d()
             self._init_optimizer()
         elif self.is_special:
@@ -63,12 +64,16 @@ class NeuMFTrainer(CFTrainer):
 
         init_weight_path = config["opt_embed"]["init_weight_path"]
         if not is_retrain:
-            torch.save(
-                {
-                    "full": self.model.state_dict(),
-                },
-                init_weight_path,
-            )
+            if os.path.exists(init_weight_path):
+                init_weight = torch.load(init_weight_path)
+                self.model.load_state_dict(init_weight["full"])
+            else:
+                torch.save(
+                    {
+                        "full": self.model.state_dict(),
+                    },
+                    init_weight_path,
+                )
         else:
             # if retrain, load original mask
             info = torch.load(init_weight_path)
