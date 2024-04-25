@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset import get_ctr_dataset
 from src.loggers import Logger
-from src.models.deepfm import DeepFM, get_optimizers
+from src.models import get_ctr_model
+from src.models.deepfm import get_optimizers
 from src.trainer.deepfm import train_epoch, validate_epoch
 from src.utils import set_seed
 
@@ -100,7 +101,7 @@ def main(argv: Optional[Sequence[str]] = None):
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = DeepFM(train_dataset.field_dims, **model_config)
+    model = get_ctr_model(train_dataset.field_dims, model_config)
 
     if torch.cuda.is_available():
         device = "cuda"
@@ -158,6 +159,9 @@ def main(argv: Optional[Sequence[str]] = None):
     best_auc = 0
     num_epochs = config["num_epochs"]
     start = time.time()
+    early_stop_count = 0
+    early_stop_config = config.get("early_stop_patience", 0)
+
     try:
         for epoch_idx in range(num_epochs):
             if is_ttrec and epoch_idx == 1:
@@ -202,6 +206,14 @@ def main(argv: Optional[Sequence[str]] = None):
                         "field_dims": train_dataset.field_dims,
                     }
                     torch.save(checkpoint, config["checkpoint_path"])
+                    early_stop_count = 0
+                else:
+                    early_stop_count += 1
+                    logger.debug(f"{early_stop_count=}")
+
+                    if early_stop_config and early_stop_count > early_stop_config:
+                        return
+
     except KeyboardInterrupt:
         pass
 

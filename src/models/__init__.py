@@ -6,6 +6,8 @@ import torch
 from src.models.lightgcn import LightGCN, SingleLightGCN
 
 from .base import IGraphBaseCore
+from .dcn import DCN_Mix
+from .deepfm import DeepFM
 from .hccf import HCCFModelCore
 
 
@@ -61,3 +63,16 @@ def save_cf_emb_checkpoint(
 
         path = os.path.join(field_dir, f"{name}.pth")
         torch.save(emb.state_dict(), path)
+
+
+def get_ctr_model(field_dims, model_config: dict):
+    name = "deepfm"
+    if "name" in model_config:
+        name = model_config.pop("name")
+
+    if name == "deepfm":
+        return DeepFM(field_dims, **model_config)
+    elif name == "dcn_mix":
+        return torch.compile(DCN_Mix(field_dims, **model_config))
+    else:
+        raise NotImplementedError()
