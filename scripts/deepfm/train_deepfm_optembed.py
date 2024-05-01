@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset import get_ctr_dataset
 from src.loggers import Logger
-from src.models.deepfm import DeepFM
+from src.models import get_ctr_model
 from src.models.embeddings.deepfm_opt_embed import IOptEmbed, OptEmbed
 from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
@@ -20,7 +20,7 @@ set_seed(2023)
 
 def train_epoch(
     dataloader: DataLoader,
-    model: DeepFM,
+    model,
     optimizers: List[torch.optim.Optimizer],
     device="cuda",
     log_step=10,
@@ -197,7 +197,7 @@ def main(argv: Optional[Sequence[str]] = None):
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = DeepFM(train_dataset.field_dims, **model_config)
+    model = get_ctr_model(train_dataset.field_dims, model_config)
 
     if torch.cuda.is_available():
         device = "cuda"

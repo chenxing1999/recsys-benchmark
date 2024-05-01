@@ -7,7 +7,7 @@ from loguru import logger
 from torch.utils.data import DataLoader
 
 from src.dataset import get_ctr_dataset
-from src.models.deepfm import DeepFM
+from src.models import load_ctr_model
 from src.trainer.deepfm import validate_epoch
 from src.utils import prune
 
@@ -99,7 +99,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     logger.info("Successfully load val dataset")
     checkpoint_path = config["checkpoint_path"]
-    model = DeepFM.load(checkpoint_path)
+    model = load_ctr_model(config["model"], checkpoint_path)
     if torch.cuda.is_available():
         device = "cuda"
     else:

@@ -127,7 +127,9 @@ def main(argv: Optional[Sequence[str]] = None):
     is_ttrec = "tt_emb" == config["model"]["embedding_config"]["name"]
     if config["run_test"]:
         checkpoint = torch.load(config["checkpoint_path"])
-        model.load_state_dict(checkpoint["state_dict"], False)
+        keys = model.load_state_dict(checkpoint["state_dict"], False)
+        if is_tt_rec_and_cache:
+            model.embedding._tt_emb.warmup = False
 
         val_metrics = validate_epoch(val_dataloader, model, device)
         for key, value in val_metrics.items():

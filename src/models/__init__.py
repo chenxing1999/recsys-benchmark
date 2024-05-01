@@ -77,8 +77,22 @@ def get_ctr_model(field_dims, model_config: dict):
         if "compile_model" in model_config:
             compile_model = model_config.pop("compile_model")
         model = DCN_Mix(field_dims, **model_config)
+        model_config["compile_model"] = compile_model
         if compile_model:
             return torch.compile(model)
+        return model
+    else:
+        raise NotImplementedError()
+
+
+def load_ctr_model(model_config, checkpoint, strict=True, *, empty_embedding=False):
+    name = "deepfm"
+    if "name" in model_config:
+        name = model_config.pop("name")
+    if name == "deepfm":
+        return DeepFM.load(checkpoint, strict, empty_embedding=empty_embedding)
+    elif name == "dcn_mix":
+        model = DCN_Mix.load(checkpoint, strict, empty_embedding=empty_embedding)
         return model
     else:
         raise NotImplementedError()

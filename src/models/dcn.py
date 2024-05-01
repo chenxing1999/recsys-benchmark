@@ -1,6 +1,7 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, cast
 
 import torch
+from loguru import logger
 from torch import nn
 
 from .embeddings import IEmbedding, get_embedding
@@ -95,3 +96,35 @@ class DCN_Mix(nn.Module):
         scores = self._dnn(cross_logit)
         scores = scores.squeeze(-1)
         return scores
+
+    @classmethod
+    def load(
+        cls,
+        checkpoint: Union[str, Dict[str, Any]],
+        strict=True,
+        *,
+        empty_embedding=False,
+    ):
+        if isinstance(checkpoint, str):
+            checkpoint = torch.load(checkpoint, map_location="cpu")
+
+        checkpoint = cast(Dict[str, Any], checkpoint)
+        model_config = checkpoint["model_config"]
+        field_dims = checkpoint["field_dims"]
+
+        model = cls(field_dims, **model_config, empty_embedding=empty_embedding)
+
+        compile_model = True
+        if "compile_model" in model_config:
+            compile_model = model_config.pop("compile_model")
+        if compile_model:
+            model = torch.compile(model)
+
+        missing, unexpected = model.load_state_dict(
+            checkpoint["state_dict"], strict=strict
+        )
+        if missing:
+            logger.warning(f"Missing keys: {missing}")
+        if unexpected:
+            logger.warning(f"Unexpected keys: {unexpected}")
+        return model

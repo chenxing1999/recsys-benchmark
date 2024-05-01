@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from src.dataset import get_ctr_dataset
 from src.loggers import Logger
-from src.models.deepfm import DeepFM
+from src.models import get_ctr_model
 
 # save logger in evolution logger to logs/evol-logger
 from src.models.embeddings.deepfm_opt_embed import evol_search_deepfm
@@ -58,7 +58,7 @@ def main(argv: Optional[Sequence[str]] = None):
     logger.info("Successfully load val dataset")
 
     model_config = config["model"]
-    model = DeepFM(train_dataset.field_dims, **model_config)
+    model = get_ctr_model(train_dataset.field_dims, model_config)
     if torch.cuda.is_available():
         device = "cuda"
     else:
