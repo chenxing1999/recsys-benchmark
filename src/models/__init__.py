@@ -35,7 +35,7 @@ def get_graph_model(
     return model
 
 
-def load_graph_model(checkpoint_path: str) -> IGraphBaseCore:
+def load_graph_model(checkpoint_path: str, strict=True) -> IGraphBaseCore:
     """Load checkpoint to correct model"""
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     num_users = checkpoint["num_users"]
@@ -43,7 +43,7 @@ def load_graph_model(checkpoint_path: str) -> IGraphBaseCore:
     model_config = checkpoint["model_config"]
 
     model = get_graph_model(num_users, num_items, model_config)
-    model.load_state_dict(checkpoint["state_dict"])
+    model.load_state_dict(checkpoint["state_dict"], strict=strict)
     return model
 
 

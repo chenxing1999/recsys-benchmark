@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import loguru
 import torch
@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset import get_ctr_dataset
 from src.loggers import Logger
+from src.models import get_ctr_model
+from src.models.dcn import DCN_Mix
 from src.models.deepfm import DeepFM
 from src.trainer.deepfm import validate_epoch
 from src.utils import set_seed
@@ -20,7 +22,7 @@ TARGET_SPARSITY = 1300
 
 def train_epoch(
     dataloader: DataLoader,
-    model: DeepFM,
+    model: Union[DeepFM, DCN_Mix],
     optimizer,
     device="cuda",
     log_step=10,
@@ -163,7 +165,7 @@ def main(argv: Optional[Sequence[str]] = None):
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = DeepFM(train_dataset.field_dims, **model_config)
+    model = get_ctr_model(train_dataset.field_dims, model_config)
 
     if torch.cuda.is_available():
         device = "cuda"
