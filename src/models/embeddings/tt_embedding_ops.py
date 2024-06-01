@@ -357,7 +357,7 @@ class TTLookupFunction(torch.autograd.Function):
             else:
                 d_cache_weight = None
             # pyre-fixme[7]
-            return tuple(
+            result = tuple(
                 [
                     None,  # D
                     None,  # tt_p_shapes
@@ -381,6 +381,7 @@ class TTLookupFunction(torch.autograd.Function):
                 ]
                 + d_tt_cores
             )
+            return result
 
 
 def suggested_tt_shapes(  # noqa C901
@@ -759,7 +760,8 @@ class TableBatchedTTEmbeddingBag(torch.nn.Module):
         self.learning_rate = lr
 
     def get_params(self) -> List[torch.Tensor]:
-        params = self.tt_cores
+        params = []
+        params.extend(self.tt_cores)
         if self.use_cache:
             params.append(self.cache_weight)
         return params

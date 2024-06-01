@@ -239,6 +239,9 @@ def main(argv: Optional[Sequence[str]] = None):
                     logger.info("New best, saving model...")
                     best_auc = val_metrics["auc"]
 
+                    sparsity, n_params = model.embedding.get_sparsity(True)
+                    val_metrics["sparsity"] = sparsity
+
                     checkpoint = {
                         "state_dict": model.state_dict(),
                         "model_config": model_config,
@@ -253,6 +256,10 @@ def main(argv: Optional[Sequence[str]] = None):
                     path = os.path.join(
                         model.embedding.checkpoint_weight_dir, f"{TARGET_SPARSITY}.pth"
                     )
+                    emb = model.embedding
+                    if len(emb.sparsity) <= emb._cur_min_spar_idx:
+                        logger.debug("Found all sparsity")
+                        break
                     if n_params <= TARGET_SPARSITY and not os.path.exists(path):
                         logger.info(f"save {TARGET_SPARSITY}")
                         torch.save(model.embedding.state_dict(), path)
