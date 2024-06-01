@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src import metrics
 from src.dataset import get_ctr_dataset
 from src.loggers import Logger
-from src.models.deepfm import DeepFM, save_model_checkpoint
+from src.models import get_ctr_model, save_ctr_checkpoint
 from src.trainer.deepfm import train_epoch_cerp, validate_epoch
 from src.utils import set_seed
 
@@ -101,7 +101,7 @@ def main(argv: Optional[Sequence[str]] = None):
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     model_config = config["model"]
-    model = DeepFM(train_dataset.field_dims, **model_config)
+    model = get_ctr_model(train_dataset.field_dims, model_config)
 
     if torch.cuda.is_available():
         device = "cuda"
@@ -148,7 +148,7 @@ def main(argv: Optional[Sequence[str]] = None):
     target_sparsity = cerp_config["target_sparsity"]
     trial_checkpoint = cerp_config["trial_checkpoint"]
 
-    save_model_checkpoint(model, trial_checkpoint, "initial")
+    save_ctr_checkpoint(model, trial_checkpoint, "initial")
     try:
         for epoch_idx in range(num_epochs):
             logger.log_metric("Epoch", epoch_idx, epoch_idx)
@@ -193,7 +193,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
             if train_metrics["sparsity"] >= target_sparsity:
                 logger.info(f"Found target sparsity. Save to {trial_checkpoint}")
-                save_model_checkpoint(model, trial_checkpoint)
+                save_ctr_checkpoint(model, trial_checkpoint)
                 break
 
     except KeyboardInterrupt:

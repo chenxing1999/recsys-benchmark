@@ -2,6 +2,7 @@ import os
 from typing import Dict, Type, Union
 
 import torch
+from loguru import logger
 
 from src.models.lightgcn import LightGCN, SingleLightGCN
 
@@ -96,3 +97,32 @@ def load_ctr_model(model_config, checkpoint, strict=True, *, empty_embedding=Fal
         return model
     else:
         raise NotImplementedError()
+
+
+def save_ctr_checkpoint(
+    model: Union[DeepFM, DCN_Mix],
+    checkpoint_dir: str,
+    name: str = "target",
+):
+    """Wrapper to save checkpoint embedding to a folder
+    in the belowing format:
+        {checkpoint_dir}/deepfm/{name}.pth
+    """
+
+    emb = model.embedding
+    if hasattr(model, "_orig_mod"):
+        logger.debug("Save _orig_mod")
+        model = model._orig_mod
+
+    if isinstance(model, DeepFM):
+        field_name = "deepfm"
+    elif isinstance(model, DCN_Mix):
+        field_name = "dcn"
+    else:
+        raise NotImplementedError(f"Not supported for {model.__class__=}")
+
+    field_dir = os.path.join(checkpoint_dir, field_name)
+    os.makedirs(field_dir, exist_ok=True)
+
+    path = os.path.join(field_dir, f"{name}.pth")
+    torch.save(emb.state_dict(), path)
