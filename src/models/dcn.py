@@ -36,8 +36,6 @@ class DCN_Mix(nn.Module):
         if not embedding_config:
             embedding_config = {"name": "vanilla"}
 
-        sum(field_dims)
-
         if not empty_embedding:
             self.embedding = get_embedding(
                 embedding_config,
@@ -112,11 +110,12 @@ class DCN_Mix(nn.Module):
         model_config = checkpoint["model_config"]
         field_dims = checkpoint["field_dims"]
 
-        model = cls(field_dims, **model_config, empty_embedding=empty_embedding)
-
         compile_model = True
         if "compile_model" in model_config:
             compile_model = model_config.pop("compile_model")
+
+        model = cls(field_dims, **model_config, empty_embedding=empty_embedding)
+
         if compile_model:
             model = torch.compile(model)
 
