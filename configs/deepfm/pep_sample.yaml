@@ -11,6 +11,7 @@ model:
     ori_weight_dir: "checkpoints/pep_ori"
     checkpoint_weight_dir: "checkpoints/pep_checkpoint/"
     init_threshold: -150
+    sparsity: [0.5, 0.8, 0.95]
 
 train_dataloader:
   dataset:
