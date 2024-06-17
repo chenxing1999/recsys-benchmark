@@ -94,11 +94,8 @@ def generate_config(trial):
 
     new_config = copy.deepcopy(base_config)
 
-    # It is better practice to keep log=True
-    # (sampling float from log uniform distribution). However, emperical
-    # results show that log=False provide better result on base model
-    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=False)
-    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=False)
+    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2)
     num_layers = trial.suggest_int("num_layers", 1, 4)
 
     name = f"lr{lr:.4f}-decay{weight_decay:.4f}-num_layers{num_layers}"

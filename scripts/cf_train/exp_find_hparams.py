@@ -24,6 +24,7 @@ DEFAULT_BEST_CHECKPOINT_PATH = "checkpoints/best_checkpoints.pth"
 
 # STABLE_RUN will use same process in training
 # If not STABLE_RUN: Run in subprocess -- Should set to False for DHE
+# to prevent generate diff initialized emb table
 STABLE_RUN = True
 
 
@@ -102,11 +103,8 @@ def generate_config(trial):
 
     new_config = copy.deepcopy(base_config)
 
-    # It is better practice to keep log=True
-    # (sampling float from log uniform distribution). However, emperical
-    # results show that log=False provide better result on base model
-    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2, log=False)
-    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2, log=False)
+    lr = trial.suggest_float("learning_rate", 5e-4, 1e-2)
+    weight_decay = trial.suggest_float("weight_decay", 1e-5, 1e-2)
     dropout = trial.suggest_float("dropout", 0, 1)
     num_neg = trial.suggest_int("num_neg", 1, 5)
 
