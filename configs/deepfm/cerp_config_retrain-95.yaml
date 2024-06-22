@@ -51,7 +51,7 @@ cerp:
 
 run_test: false
 
-checkpoint_path: checkpoints/cerp-95-criteo.pth 
+checkpoint_path: checkpoints/cerp-95-criteo.pth
 num_epochs: 15
 log_step: 1000
 
