@@ -115,3 +115,13 @@ class KddDataset(ICTRDataset):
 
     def pop_info(self):
         return {}
+
+
+if __name__ == "__main__":
+    import os
+
+    dataset_path = "dataset/ctr/kdd/"
+    train_test_info = os.path.join(dataset_path, "preprocessed/train_test_val_info.bin")
+    dataset_path = os.path.join(dataset_path, "track2/traininng.txt")
+
+    dataset = KddDataset(train_test_info, "train", dataset_path)
