@@ -6,6 +6,7 @@ from src.dataset.avazu.avazu_fm import AvazuDataset
 from src.dataset.avazu.avazu_on_ram import AvazuOnRam
 from src.dataset.base import ICTRDataset
 from src.dataset.criteo import get_dataset_cls
+from src.dataset.kdd.kdd_dataset import KddDataset
 
 
 def get_ctr_dataset(
@@ -26,6 +27,8 @@ def get_ctr_dataset(
         dataset_cls = AvazuOnRam
     elif name == "avazu_fm":
         dataset_cls = AvazuDataset
+    elif name == "kdd":
+        dataset_cls = KddDataset
 
     logger.info(f"Datset cls: {dataset_cls}")
     return dataset_cls(**dataset_config, **train_info_to_val)
