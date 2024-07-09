@@ -30,6 +30,7 @@ class KddDataset(ICTRDataset):
         self.NUM_FEATS = 11
         self.min_threshold = min_threshold
 
+        train_test_info = torch.load(train_test_info)
         if rebuild_cache or not Path(cache_path).exists():
             shutil.rmtree(cache_path, ignore_errors=True)
             if dataset_path is None:
@@ -40,8 +41,6 @@ class KddDataset(ICTRDataset):
                 train_test_info,
             )
         self.env = lmdb.open(cache_path, create=False, lock=False, readonly=True)
-
-        train_test_info = torch.load(train_test_info)
 
         self._line_in_dataset = list(train_test_info[dataset_name])
         self._line_in_dataset.sort()
@@ -57,7 +56,9 @@ class KddDataset(ICTRDataset):
             np_array = np.frombuffer(
                 txn.get(struct.pack(">I", index)), dtype=np.uint32
             ).astype(dtype=np.int64)
-        return np_array[1:], np_array[0]
+
+        # np_array[0] is number of clicks
+        return np_array[1:], float(np_array[0])
 
     def __len__(self):
         return len(self._line_in_dataset)
@@ -68,7 +69,7 @@ class KddDataset(ICTRDataset):
         cache_path: str,
         train_test_info,
     ):
-        feat_mapper = train_test_info["feat_mapper"]
+        feat_mapper = train_test_info["feat_mappers"]
         defaults = train_test_info["defaults"]
 
         num_feats = self.NUM_FEATS
@@ -88,7 +89,6 @@ class KddDataset(ICTRDataset):
         item_idx = 0
         buffer = list()
         with open(path) as f:
-            f.readline()
             pbar = tqdm(f, mininterval=1, smoothing=0.1)
             pbar.set_description("Create avazu dataset cache: setup lmdb")
             for line in pbar:
@@ -96,7 +96,7 @@ class KddDataset(ICTRDataset):
                 assert len(values) == self.NUM_FEATS + 1
 
                 np_array = np.zeros(self.NUM_FEATS + 1, dtype=np.uint32)
-                np_array[0] = int(values[0])
+                np_array[0] = int(values[0]) >= 1
                 for i in range(1, self.NUM_FEATS + 1):
                     np_array[i] = feat_mapper[i].get(values[i], defaults[i])
 
@@ -122,6 +122,17 @@ if __name__ == "__main__":
 
     dataset_path = "dataset/ctr/kdd/"
     train_test_info = os.path.join(dataset_path, "preprocessed/train_test_val_info.bin")
-    dataset_path = os.path.join(dataset_path, "track2/traininng.txt")
+    dataset_path = os.path.join(dataset_path, "track2/training.txt")
 
-    dataset = KddDataset(train_test_info, "train", dataset_path)
+    dataset = KddDataset(
+        train_test_info,
+        "train",
+        dataset_path,
+        # cache_path="tmp",
+        cache_path=".kdd",
+        rebuild_cache=True,
+    )
+    print(len(dataset))
+
+    idx = 119711284
+    print(dataset[idx - 1])
