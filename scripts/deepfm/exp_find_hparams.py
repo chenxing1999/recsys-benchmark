@@ -40,6 +40,36 @@ def parse_args():
         default=DEFAULT_BEST_CHECKPOINT_PATH,
         help="Path to best checkpoint path",
     )
+    parser.add_argument(
+        "--tmp_checkpoint_path",
+        "-p",
+        default=DEFAULT_BEST_CHECKPOINT_PATH,
+        help="Path to tmp trial checkpoint path",
+    )
+    parser.add_argument(
+        "--n_trials",
+        default=30,
+        type=int,
+        help="Number of trials for Optuna",
+    )
+    parser.add_argument(
+        "--db",
+        default="sqlite:///db-deepfm.sqlite3",
+        type=str,
+        help="Path to Optuna Database",
+    )
+    parser.add_argument(
+        "--disbale_subprocess",
+        action="store_true",
+        help="Disable subprocess version. In short, enable subprocess"
+        "-> cannot edit code, same model init every run.",
+    )
+    parser.add_argument(
+        "--max_trials",
+        default=None,
+        type=int,
+        help="Maximum trials. Set this for multiple parallel runs",
+    )
     args = parser.parse_args()
 
     logger.debug(args)
@@ -71,6 +101,8 @@ RUN_NAME = args.run_name
 with open(BASE_CONFIG) as fin:
     base_config = yaml.safe_load(fin)
 
+if args.tmp_checkpoint_path:
+    base_config["checkpoint_path"] = args.tmp_checkpoint_path
 CHECKPOINT_PATH = base_config["checkpoint_path"]
 BEST_CHECKPOINT_PATH = args.best_checkpoint_path
 
@@ -105,7 +137,10 @@ def objective(trial: optuna.Trial):
     with open(tmp_file, "w") as fout:
         yaml.dump(new_config, fout)
 
-    subprocess.run(["python", train_deepfm.__file__, tmp_file])
+    if args.disable_subprocess:
+        train_deepfm.main([tmp_file])
+    else:
+        subprocess.run(["python", train_deepfm.__file__, tmp_file])
 
     torch.cuda.empty_cache()
 
@@ -118,6 +153,10 @@ def objective(trial: optuna.Trial):
 def save_best_on_val_callbacks(study, frozen_trial):
     previous_best_value = study.user_attrs.get("previous_best_value", None)
     if previous_best_value != study.best_value:
+        logger.info(
+            f"Save best. Cur best={study.best_value:.4f}."
+            "Prev best={previous_best_value:.4f}."
+        )
         study.set_user_attr("previous_best_value", study.best_value)
         shutil.copy(CHECKPOINT_PATH, BEST_CHECKPOINT_PATH)
 
@@ -129,15 +168,24 @@ def main():
     sampler = optuna.samplers.TPESampler(
         seed=2023
     )  # Make the sampler behave in a deterministic way.
+
+    callbacks = [save_best_on_val_callbacks]
+    if args.max_trials:
+        callbacks.append(optuna.study.MaxTrialsCallback(args.max_trials))
+
     study = optuna.create_study(
-        "sqlite:///db-deepfm.sqlite3",
+        args.db,
         study_name=RUN_NAME,
         direction="maximize",
         load_if_exists=True,
         sampler=sampler,
     )
 
-    study.optimize(objective, 30, callbacks=[save_best_on_val_callbacks])
+    study.optimize(
+        objective,
+        args.n_trials,
+        callbacks=callbacks,
+    )
     trial = study.best_trial
 
     logger.info(trial.params)
