@@ -524,3 +524,38 @@ def test_dhe_compute_v2_init_universal():
     emb._init_all_hash()
     assert emb._cache.shape == (sum(field_dims), 64)
     DHEmbedding.COUNTER = 0
+
+
+@pytest.mark.parametrize("n_bits", [16, 8])
+def test_ptq_int1(n_bits):
+    """Every value of w in (r_max, r_min)"""
+    from src.models.embeddings.ptq_emb import PTQEmb_Int
+
+    bias = 0
+    scale = 0.1
+    q_min = (-1) * (1 << (n_bits - 1))
+    q_max = (1 << (n_bits - 1)) - 1
+
+    r_min = (q_min - bias) * scale
+    r_max = scale * (q_max - q_min) + r_min
+
+    w = torch.tensor(
+        [[r_min, 0.11, 0.22, 0.31, 0.66, 0.82, 1.31, r_max]],
+        dtype=torch.float32,
+    )
+
+    ptq_weight = torch.tensor(
+        [[q_min, 1, 2, 3, 7, 8, 13, q_max]],
+        dtype=torch.int16,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "tmp.pth")
+        torch.save(
+            {"state_dict": {"embedding._emb_module.weight": w}},
+            path,
+        )
+
+        emb = PTQEmb_Int([1], 8, None, path, n_bits)
+        assert (emb.weight == ptq_weight).all(), f"{emb.weight} != {ptq_weight}"
+        assert (emb.get_weight().isclose((ptq_weight * scale))).all()

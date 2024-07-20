@@ -72,9 +72,16 @@ class StotasticRounding(torch.autograd.Function):
         mask3 = torch.logical_and(~mask1, ~mask2)
 
         # arr = q_w[mask3]
-        arr = q_w[mask3] - res[mask3]
-        scale_mask[mask3] = -arr
+        # print(q_w, res)
 
+        # (P.Round()(q_w)-q_w)
+        # q_w=q_w, res=P.Round()(q_w)
+        arr = q_w[mask3] - res[mask3]
+        print("arr", arr)
+        scale_mask[mask3] = -arr
+        # scale_mask = q_w - res
+
+        # 3, 5, 7
         grad_scale = grad_output * scale_mask
 
         return grad_scale, grad_output.clone(), torch.tensor(0)
@@ -119,22 +126,3 @@ class QAT_EmbInt(VanillaEmbedding):
 
     def get_weight(self):
         super().get_weight()
-
-
-if __name__ == "__main__":
-    w = torch.rand((3, 5, 7), dtype=torch.float32)
-    scale = torch.ones(1, requires_grad=True, dtype=torch.float64) * 0.1
-
-    n_bits = torch.tensor(8)
-
-    # print("w", w)
-    res = StotasticRounding.apply(scale, w, n_bits)
-    # print(res)
-    # print(res.shape)
-
-    #  res.sum().backward()
-
-    #  print(scale.grad)
-    #  print(w.grad)
-
-    print(torch.autograd.gradcheck(StotasticRounding.apply, (w, scale, n_bits)))

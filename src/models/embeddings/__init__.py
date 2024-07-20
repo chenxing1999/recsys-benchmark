@@ -10,6 +10,7 @@ from .deepfm_opt_embed import RetrainOptEmbed as DeepFMRetrainOptEmbed
 from .dh_embedding import DHEmbedding
 from .lightgcn_opt_embed import OptEmbed, RetrainOptEmbed
 from .pep_embedding import PepEmbeeding, RetrainPepEmbedding
+from .qat_emb import QAT_EmbInt
 from .qr_embedding import QRHashingEmbedding
 from .tensortrain_embeddings import TTEmbedding  # type: ignore
 from .tensortrain_embeddings import TTRecTorch
@@ -31,6 +32,7 @@ NAME_TO_CLS = {
     "tt_emb_torch": TTRecTorch,
     "cerp": CerpEmbedding,
     "cerp_retrain": RetrainCerpEmbedding,
+    "qat": QAT_EmbInt,
 }
 
 
