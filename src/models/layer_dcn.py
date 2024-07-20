@@ -113,3 +113,28 @@ class DCN_MixHead(nn.Module):
             x_l = einsum(gates, E, "b e, b e d -> b d") + x_l
 
         return x_l
+
+
+class DCNHead(nn.Module):
+    def __init__(self, num_layers, hidden_size):
+        super().__init__()
+
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+
+        self.layers = nn.ModuleList(
+            [nn.Linear(hidden_size, hidden_size) for _ in range(num_layers)]
+        )
+
+    def forward(self, x_0):
+        """
+        Args:
+            x_0: torch.FloatTensor - Batch x HiddenSize
+
+        Returns:
+            x_l: torch.FloatTensor - Batch x HiddenSize
+        """
+        x_l = x_0
+        for layer in self.layers:
+            x_l = x_l + x_0 * layer(x_l)
+        return x_l
