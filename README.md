@@ -42,8 +42,26 @@ python scripts/lightgcn/train_lightgcn.py configs/yelp2018/base_config.yaml
 Run Hyperparam search with Optuna
 
 ```shell
-mkdir -p checkpoints/lightgcn/sgl-wa.pth
+mkdir -p checkpoints/lightgcn/
+
+# Storing logs at "logs/sgl-wa" and best checkpoint at "checkpoints/lightgcn/sgl-wa.pth".
 python scripts/lightgcn/exp_find_hparams.py -c configs/yelp2018/base_config.yaml -l logs/sgl-wa -p checkpoints/lightgcn/sgl-wa.pth
+```
+
+Train DeepFM:
+
+```shell
+python scripts/deepfm/train_deepfm.py configs/criteo/base_config.yaml
+```
+
+Run Hyperparam search with Optuna
+
+```shell
+mkdir -p checkpoints/deepfm/
+
+# Storing logs at "logs/deepfm" and best checkpoint at "checkpoints/deepfm/original.pth".
+python scripts/deepfm/exp_find_hparams.py -c configs/criteo/base_config.yaml -l logs/deepfm -p checkpoints/deepfm/original.pth
+
 ```
 
 For more detail with LightGCN, click [here](./docs/lightgcn_tutorial.md)
@@ -52,7 +70,7 @@ For more detail with DeepFM, click [here](./docs/deepfm_tutorial.md). DCN-Mix us
 
 ## Other artifacts
 
-TBD
+Please send an email to `h.v.tran@uq.edu.au` for necessary checkpoints and data splits.
 
 ## Acknowledge
 
