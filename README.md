@@ -1,7 +1,7 @@
 # RecSys Benchmark
 
 This is the source code provided for the paper
-<i><href link="https://arxiv.org/pdf/2406.17335">A Thorough Performance Benchmarking on Lightweight Embedding-based Recommender Systems</href></i>.
+<i>A Thorough Performance Benchmarking on Lightweight Embedding-based Recommender Systems</i> ([Link](https://arxiv.org/pdf/2406.17335)).
 
 If you find this repo helpful, please give a star and cite the below paper if possible:
 
