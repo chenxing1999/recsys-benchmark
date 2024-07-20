@@ -1,5 +1,19 @@
 # RecSys Benchmark
 
+This is the source code provided for the paper
+<href link="https://arxiv.org/pdf/2406.17335"><i>A Thorough Performance Benchmarking on Lightweight Embedding-based Recommender Systems</i></href>.
+
+If you find this repo helpful, please give a star and cite the below paper if possible:
+
+```
+@article{tran2024thorough,
+  title={A Thorough Performance Benchmarking on Lightweight Embedding-based Recommender Systems},
+  author={Tran, Hung Vinh and Chen, Tong and Nguyen, Quoc Viet Hung and Huang, Zi and Cui, Lizhen and Yin, Hongzhi},
+  journal={arXiv preprint arXiv:2406.17335},
+  year={2024}
+}
+```
+
 ## Installation
 
 ```shell
