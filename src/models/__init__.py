@@ -7,7 +7,7 @@ from loguru import logger
 from src.models.lightgcn import LightGCN, SingleLightGCN
 
 from .base import IGraphBaseCore
-from .dcn import DCN_Mix
+from .dcn import DCN_Mix, DCNv2
 from .deepfm import DeepFM
 from .hccf import HCCFModelCore
 
@@ -81,6 +81,9 @@ def get_ctr_model(field_dims, model_config: dict):
         model_config["compile_model"] = compile_model
         if compile_model:
             return torch.compile(model)
+        return model
+    elif name == "dcn":
+        model = DCNv2(field_dims, **model_config)
         return model
     else:
         raise NotImplementedError()
