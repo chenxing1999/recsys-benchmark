@@ -16,11 +16,10 @@ def get_config(argv: Optional[Sequence[str]] = None) -> Tuple[Dict, argparse.Nam
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     parser.add_argument(
-        "-p",
-        "--prune-ratio",
-        type=float,
-        default=0,
-        help="Prune percent of model. If is 0, this script become evaluate",
+        "--n_bits",
+        type=int,
+        choices=[16, 32, 8],
+        help="N-bits for embedding layer",
     )
     parser.add_argument(
         "--checkpoint_path",
@@ -107,8 +106,7 @@ def main(argv: Optional[Sequence[str]] = None):
 
     # Load checkpoint
     checkpoint_path = config["checkpoint_path"]
-    model.embedding = PTQEmb_Int(None, None, None, checkpoint_path, 16)
-    # model.embedding = PTQEmb_Fp16(None, None, None, checkpoint_path)
+    model.embedding = PTQEmb_Int(None, None, None, checkpoint_path, args.n_bits)
     model.to(device)
 
     # uncomment this for TTRec
