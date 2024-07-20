@@ -28,18 +28,15 @@ class StotasticRounding(torch.autograd.Function):
         """
 
         q_w_float = w / scale
-        # print("w/scale", q_w_float)
 
         q_max, q_min = get_qmax_qmin(n_bits)
 
         # Clip(w / scale)
         q_w = torch.clamp(q_w_float, q_min, q_max)
-        # print("clip(w/scale)", q_w)
 
         # Stotastic Rounding
         q_w_floor = torch.floor(q_w)
         prob_floor = q_w_floor + 1 - q_w
-        # print("prob_floor", prob_floor)
         prob = torch.rand_like(prob_floor)
 
         is_ceil = prob > prob_floor
@@ -77,7 +74,6 @@ class StotasticRounding(torch.autograd.Function):
         # (P.Round()(q_w)-q_w)
         # q_w=q_w, res=P.Round()(q_w)
         arr = q_w[mask3] - res[mask3]
-        print("arr", arr)
         scale_mask[mask3] = -arr
         # scale_mask = q_w - res
 
@@ -111,8 +107,6 @@ class QAT_EmbInt(VanillaEmbedding):
         if isinstance(field_dims, int):
             field_dims = [field_dims]
 
-        sum(field_dims)
-
         q_max, q_min = get_qmax_qmin(self.n_bits)
 
         with torch.no_grad():
@@ -125,4 +119,4 @@ class QAT_EmbInt(VanillaEmbedding):
         return StotasticRounding.apply(self.scale, emb, self.n_bits)
 
     def get_weight(self):
-        super().get_weight()
+        return super().get_weight()
