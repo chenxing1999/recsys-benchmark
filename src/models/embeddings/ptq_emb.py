@@ -76,6 +76,7 @@ class PTQEmb_Int(IEmbedding):
         self.register_buffer("bias", bias)
 
         weight = emb / scale + bias
+        torch.round_(weight)
         self.register_buffer("weight", weight.to(dtype))
 
     def forward(self, x):
