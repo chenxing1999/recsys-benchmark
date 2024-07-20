@@ -58,7 +58,7 @@ class PTQEmb_Int(IEmbedding):
         emb: torch.Tensor = state["embedding._emb_module.weight"]
 
         # calculate scale
-        assert n_bits in [8, 16]
+        assert n_bits in [4, 8, 16]
         self.n_bits = n_bits
 
         q_min = (-1) * (1 << (self.n_bits - 1))
@@ -77,6 +77,9 @@ class PTQEmb_Int(IEmbedding):
 
         weight = emb / scale + bias
         torch.round_(weight)
+        if n_bits < 8:
+            torch.clamp_(weight, q_min, q_max)
+
         self.register_buffer("weight", weight.to(dtype))
 
     def forward(self, x):
