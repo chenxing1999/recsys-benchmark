@@ -42,8 +42,7 @@ def parse_args():
     )
     parser.add_argument(
         "--tmp_checkpoint_path",
-        "-p",
-        default=DEFAULT_BEST_CHECKPOINT_PATH,
+        default=None,
         help="Path to tmp trial checkpoint path",
     )
     parser.add_argument(
@@ -59,7 +58,7 @@ def parse_args():
         help="Path to Optuna Database",
     )
     parser.add_argument(
-        "--disbale_subprocess",
+        "--disable_subprocess",
         action="store_true",
         help="Disable subprocess version. In short, enable subprocess"
         "-> cannot edit code, same model init every run.",
