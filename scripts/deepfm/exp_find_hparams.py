@@ -152,9 +152,11 @@ def objective(trial: optuna.Trial):
 def save_best_on_val_callbacks(study, frozen_trial):
     previous_best_value = study.user_attrs.get("previous_best_value", None)
     if previous_best_value != study.best_value:
+        if previous_best_value is None:
+            previous_best_value = 0
         logger.info(
             f"Save best. Cur best={study.best_value:.4f}."
-            "Prev best={previous_best_value:.4f}."
+            f"Prev best={previous_best_value:.4f}."
         )
         study.set_user_attr("previous_best_value", study.best_value)
         shutil.copy(CHECKPOINT_PATH, BEST_CHECKPOINT_PATH)
