@@ -2,6 +2,7 @@ import random
 from typing import Dict
 
 import numpy as np
+import optuna
 import torch
 
 
@@ -85,3 +86,23 @@ def get_size_tensor(tensor: torch.Tensor) -> int:
         return size
     else:
         raise NotImplementedError()
+
+
+def recover_sampler(sampler, generate_config, n_trials: int) -> None:
+    """Recover sampler state by running fake run
+    Only work to run first 10 runs (which was randomly generated).
+
+    Args:
+        sampler
+        generate_config: Generate config function
+            that sampler call each time
+
+        n_trials: Num trial to recover from
+    """
+    study = optuna.create_study(sampler=sampler)
+
+    def fake_obj(trial):
+        generate_config(trial)
+        return 1
+
+    study.optimize(fake_obj, n_trials)

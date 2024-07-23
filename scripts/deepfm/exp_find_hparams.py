@@ -12,7 +12,9 @@ import train_deepfm
 import yaml
 from loguru import logger
 
-DEFAULT_BASE_CONFIG_PATH = "../configs/deepfm/base_config.yaml"
+from src.utils import recover_sampler
+
+DEFAULT_BASE_CONFIG_PATH = "../../configs/deepfm/base_config.yaml"
 DEFAULT_BASE_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__), DEFAULT_BASE_CONFIG_PATH
 )
@@ -50,6 +52,12 @@ def parse_args():
         default=30,
         type=int,
         help="Number of trials for Optuna",
+    )
+    parser.add_argument(
+        "--n_recover_trials",
+        default=0,
+        type=int,
+        help="Number of trials has been finished for Optuna",
     )
     parser.add_argument(
         "--db",
@@ -173,6 +181,9 @@ def main():
     callbacks = [save_best_on_val_callbacks]
     if args.max_trials:
         callbacks.append(optuna.study.MaxTrialsCallback(args.max_trials))
+
+    if args.n_recover_trials > 0:
+        recover_sampler(sampler, generate_config, args.n_recover_trials)
 
     study = optuna.create_study(
         args.db,
