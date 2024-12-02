@@ -2,7 +2,7 @@ import shutil
 import struct
 from collections import defaultdict
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 import lmdb
 import numpy as np
@@ -82,6 +82,19 @@ class AvazuDataset(ICTRDataset):
                 txn.get(struct.pack(">I", index)), dtype=np.uint32
             ).astype(dtype=np.int64)
         return np_array[1:], np_array[0]
+
+    def __getitems__(self, indices: List[int]):
+        indices = [self._line_in_dataset[idx] for idx in indices]
+        with self.env.begin(write=False) as txn:
+            cursor = txn.cursor()
+            keys = [struct.pack(">I", index) for index in indices]
+            res = cursor.getmulti(keys)
+
+            # Use numpy read instead of torch to support old version torch
+            array = np.stack([np.frombuffer(arr, dtype=np.uint32) for key, arr in res])
+            array = array.astype(np.int32)
+
+        return [(arr[1:], arr[0]) for arr in array]
 
     def __len__(self):
         return len(self._line_in_dataset)

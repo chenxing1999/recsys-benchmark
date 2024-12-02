@@ -3,6 +3,7 @@ import tempfile
 
 import pytest
 import torch
+from torch.utils.data import DataLoader
 
 from src.dataset import get_ctr_dataset
 from src.dataset.criteo import CriteoDataset, CriteoFMDataset, CriteoIterDataset
@@ -170,7 +171,14 @@ def test_get_criteo_fm_get(cache_path):
         indices = list(range(30, 50))
         x, y = torch.utils.data.default_collate([dataset[idx] for idx in indices])
 
-        x2, y2 = dataset.__getitems__(indices)
+        x2, y2 = torch.utils.data.default_collate(dataset.__getitems__(indices))
 
         assert (x == x2).all()
         assert (y == y2).all()
+
+        # Sanity check with loader
+        loader = DataLoader(dataset, 50)
+
+        batch_x, batch_y = next(iter(loader))
+        assert (batch_x[30:] == x).all()
+        assert (batch_y[30:] == y).all()

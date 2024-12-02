@@ -87,9 +87,10 @@ class CriteoDataset(ICTRDataset):
             # Use numpy read instead of torch to support old version torch
             array = np.stack([np.frombuffer(arr, dtype=np.uint32) for key, arr in res])
             array = array.astype(np.int32)
-            array = torch.from_numpy(array)
 
-        return array[:, 1:], array[:, 0]
+        # T_Col=(X, y)
+        # Return type is list T_col
+        return [(arr[1:], arr[0]) for arr in array]
 
     def __len__(self):
         return len(self._line_in_dataset)
